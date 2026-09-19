@@ -29,9 +29,9 @@ Remove it with `omarchy plugin remove huacnlee.theme_rgb`.
 
 Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
 
-- **Colours** — `1`, `3`, `Default` (five) or `8`. *1* is the accent on
+- **Colours** — `1`, `3`, `5` (the default) or `8`. *1* is the accent on
   every device. *3* is the accent and two of the theme's named colours.
-  *Default* and *8* are the theme's named colours only, in an order that
+  *5* and *8* are the theme's named colours only, in an order that
   suits what each device is for: on the desk (keyboard, mouse, headset, pad)
   `blue, yellow, red, green, magenta, cyan…`; around it (screen, strips,
   RAM, motherboard, case) `blue, magenta, cyan, red, green, yellow…`.

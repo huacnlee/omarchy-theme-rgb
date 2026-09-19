@@ -37,7 +37,7 @@ Panel {
   readonly property var modes: [
     { value: "single", label: "1", tooltip: "One theme colour on every device — the accent unless you pick another" },
     { value: "3", label: "3", tooltip: "Three colours: accent, background, foreground" },
-    { value: "5", label: "Default", tooltip: "Five colours: those three plus two more, chosen by what each device is for" },
+    { value: "5", label: "5", tooltip: "Five of the theme's colours, chosen by what each device is for (the default)" },
     { value: "8", label: "8", tooltip: "Eight: the theme's named colours in order, by what each device is for" }
   ]
 
