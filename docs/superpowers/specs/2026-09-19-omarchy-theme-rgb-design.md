@@ -237,3 +237,10 @@ Unchanged in shape: a headless `openrgb --server --noautoconnect` kept alive
 for the life of the shell, the first sync held until port 6742 answers (up to
 20 s), serialised saves, one retry on a failed apply, and openrgb's output in
 `~/.local/state/omarchy/theme-rgb/last-apply.log`.
+
+## Revision 8 — one order for every device
+
+The desk/ambient split is gone: every device takes the same per-theme order,
+so a one-LED motherboard and the first band of a monitor's backlight show
+the accent like the keyboard's first band. `stops` still prints both lines,
+identical. The panel shows one preview strip.

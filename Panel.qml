@@ -45,7 +45,6 @@ Panel {
   readonly property string modeValue: mode === "palette" ? String(service ? service.colors : 5) : mode
   readonly property var variables: service && service.variables ? service.variables : []
   readonly property var stops: service && service.deskStops ? service.deskStops : []
-  readonly property var ambientStops: service && service.ambientStops ? service.ambientStops : []
   readonly property int colors: service ? service.colors : 5
   readonly property var devices: service && service.devices ? service.devices : []
   readonly property int brightness: service ? service.brightness : 100
@@ -442,12 +441,9 @@ Panel {
           }
         }
 
-        // Preview: the stops as bands, the way a strip of LEDs shows them —
-        // one strip per device class when they differ.
+        // Preview: the stops as bands, the way a strip of LEDs shows them.
         Repeater {
-          model: themeRgb.mode === "palette"
-            ? [{ label: "Desk", colors: themeRgb.stops }, { label: "Around", colors: themeRgb.ambientStops }]
-            : [{ label: "", colors: themeRgb.stops }]
+          model: [{ label: "", colors: themeRgb.stops }]
 
           delegate: Item {
             id: preview

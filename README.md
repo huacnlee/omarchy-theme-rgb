@@ -2,7 +2,7 @@
 
 **Your theme, on every light.**
 
-<img src="preview.png" alt="The Theme RGB panel: colours, layout, brightness, the Desk and Around preview strips, and the devices found" width="480">
+<img src="preview.png" alt="The Theme RGB panel: colours, layout, brightness, the preview strip, and the devices found" width="480">
 
 Lights every device [OpenRGB](https://openrgb.org) manages in the colours of
 the current [Omarchy](https://omarchy.org) theme. Switch themes and your
@@ -45,8 +45,7 @@ Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
 - **Brightness** — 10–100 %. Scales the colour values themselves, so it
   works the same in every OpenRGB mode; it is the only change made to what
   the theme says.
-- **Desk** / **Around** — the exact colours each class of device gets, as
-  bands. With one colour there is a single strip.
+- **Preview** — the exact colours the LEDs get, as bands.
 - **Devices** — what OpenRGB found on the last sync, with LED counts.
 
 **Menu** — the `󰇘` button in the header lists *Sync now* and *GitHub*.
@@ -70,11 +69,10 @@ those:
 3. the accent comes first, then each next colour is the one whose hue is
    farthest from the previous, so neighbouring bands contrast.
 
-*3*, *5* and *8* take the first that many. Devices on the desk — keyboard,
-mouse, mousemat, headset, headset stand, gamepad — take that order; everything
-else (screen, strips, RAM, motherboard, case…) starts one colour later, so
-the two are related but not identical. A theme with fewer usable colours
-lights fewer; a grey theme lights the accent alone. The LEDs get the theme's
+*3*, *5* and *8* take the first that many, and every device takes the same
+order — so a one-LED motherboard and the first band of a screen's backlight
+show the accent, as the keyboard's first band does. A theme with fewer
+usable colours lights fewer; a grey theme lights the accent alone. The LEDs get the theme's
 exact hex values, scaled only by the brightness setting — no gamma, no mixing
 toward white.
 

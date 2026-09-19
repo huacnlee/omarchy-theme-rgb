@@ -158,22 +158,22 @@ fi
 # Pure hues: accent 240°, red 0, orange 30, yellow 60, green 120, cyan 180,
 # blue 210, magenta 300, brown 270. Accent first, then always the hue
 # farthest from the previous: yellow, blue, orange, cyan, red, green,
-# magenta, brown. Ambient starts one later.
+# magenta, brown. Every device gets the same list.
 
 # --- 3 colours: the accent, then the two most contrasting -----------------
 set_config '{"mode": "palette", "colors": 3}'
-if [[ $(stops) == 0000ff,ffff00,0080ff && $(stops ambient) == ffff00,0080ff,ff8000 ]]; then
+if [[ $(stops) == 0000ff,ffff00,0080ff && $(stops ambient) == 0000ff,ffff00,0080ff ]]; then
   pass "3 colours: the accent, then the two most contrasting"
 else
   fail "3 colours: the accent, then the two most contrasting" "$(stops) / $(stops ambient)"
 fi
 
-# --- 5 colours carry on the same order; ambient is one colour along -------
+# --- 5 colours carry on the same order, on every device -------------------
 set_config '{"mode": "palette", "colors": 5}'
-if [[ $(stops) == 0000ff,ffff00,0080ff,ff8000,00ffff && $(stops ambient) == ffff00,0080ff,ff8000,00ffff,ff0000 ]]; then
-  pass "5 colours carry on the same order; ambient is one colour along"
+if [[ $(stops) == 0000ff,ffff00,0080ff,ff8000,00ffff && $(stops ambient) == 0000ff,ffff00,0080ff,ff8000,00ffff ]]; then
+  pass "5 colours carry on the same order, on every device"
 else
-  fail "5 colours carry on the same order; ambient is one colour along" "$(stops) / $(stops ambient)"
+  fail "5 colours carry on the same order, on every device" "$(stops) / $(stops ambient)"
 fi
 
 # --- 8 colours ------------------------------------------------------------
@@ -228,7 +228,7 @@ else
   fail "a grey theme lights the accent alone" "$(stops) / $(stops ambient)"
 fi
 
-# --- each device gets its own class's colours in the one call -------------
+# --- every device gets the same colours in the one call --------------------
 cat >"$theme/colors.toml" <<'TOML'
 accent = "#0000ff"
 background = "#001000"
@@ -246,18 +246,18 @@ OPENRGB_LIST_DEVICES='0: ENE DRAM
   Type:           Keyboard
   Modes: [Direct] Static
   LEDs: a b c d e ' run_apply
-if called 'openrgb -d 0 -m direct -c ffff00,ffff00,ff00ff,00ff00,0000ff -d 1 -m direct -c 0000ff,0000ff,ffff00,ff00ff,00ff00'; then
-  pass "each device gets its own class's colours in the one call"
+if called 'openrgb -d 0 -m direct -c 0000ff,0000ff,ffff00,ff00ff,00ff00 -d 1 -m direct -c 0000ff,0000ff,ffff00,ff00ff,00ff00'; then
+  pass "every device gets the same colours in the one call"
 else
-  fail "each device gets its own class's colours in the one call" "$(cat "$calls")"
+  fail "every device gets the same colours in the one call" "$(cat "$calls")"
 fi
 
-# --- failed detection broadcasts the desk colours -------------------------
+# --- failed detection broadcasts the colours ------------------------------
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" OPENRGB_LIST_FAIL=1 run_apply
 if called 'openrgb -c 0000ff,ffff00,ff00ff,00ff00'; then
-  pass "failed detection broadcasts the desk colours"
+  pass "failed detection broadcasts the colours"
 else
-  fail "failed detection broadcasts the desk colours" "$(cat "$calls")"
+  fail "failed detection broadcasts the colours" "$(cat "$calls")"
 fi
 
 # ==========================================================================

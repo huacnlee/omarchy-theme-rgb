@@ -34,13 +34,12 @@ CUSTOM=""
 BRIGHTNESS=100
 LAYOUT=flow        # flow | rows | columns | zones
 
-# With three, five or eight colours each device lights the theme's own
+# With three, five or eight colours every device lights the theme's own
 # colours, chosen per theme (see theme_order): the accent first, then the
 # colours that differ most from their neighbour, skipping greys, dark tones
-# and near-duplicates. The desk (keyboard, mouse, ...) takes that order;
-# everything else — the screen's backlight, the strips, what is inside the
-# case — starts one colour later, so the two are related but not identical.
-DESK_TYPES="Keyboard Mouse Mousemat Headset HeadsetStand Gamepad"
+# and near-duplicates. Every device takes the same order, so a one-LED board
+# and the first band of a screen's backlight show the accent, like the
+# keyboard's first band does.
 
 is_variable() { [[ " $VARIABLES " == *" $1 "* ]]; }
 
@@ -269,15 +268,11 @@ theme_order() {
   '
 }
 
-# The first `count` colours of the theme order for a class: the desk takes
-# it as is, ambient starts one colour later.
-class_colors() {
-  local class="$1" count="$2" all=()
+# The first `count` colours of the theme order.
+theme_colors() {
+  local count="$1" all=()
   mapfile -t all < <(theme_order)
   (( ${#all[@]} > 0 )) || return
-  if [[ $class == ambient ]] && (( ${#all[@]} > 1 )); then
-    all=("${all[@]:1}" "${all[0]}")
-  fi
   printf '%s\n' "${all[@]:0:count}"
 }
 
@@ -315,14 +310,13 @@ scale_color() {
   '
 }
 
-# The colours a class of device lights, one per line, already through the
-# brightness. `class` is desk or ambient; single and
-# custom modes are the same for both.
-class_stops() {
-  local class="$1" color colors=()
+# The colours every device lights, one per line, already through the
+# brightness.
+all_stops() {
+  local color colors=()
 
   case $MODE in
-    palette) mapfile -t colors < <(class_colors "$class" "$COLORS") ;;
+    palette) mapfile -t colors < <(theme_colors "$COLORS") ;;
     custom) mapfile -t colors < <(custom_colors) ;;
   esac
   if (( ${#colors[@]} == 0 )); then
@@ -336,14 +330,14 @@ class_stops() {
   done
 }
 
-# "desk a,b,c" and "ambient a,b,c": what each class of device gets.
+# "desk a,b,c" and "ambient a,b,c": every device gets the same list; both
+# lines stay for the panel, which reads them by name.
 stops() {
-  local desk ambient
-  desk=$(class_stops desk | paste -sd,)
-  ambient=$(class_stops ambient | paste -sd,)
-  [[ -n $desk ]] || return
-  echo "desk $desk"
-  echo "ambient $ambient"
+  local list
+  list=$(all_stops | paste -sd,)
+  [[ -n $list ]] || return
+  echo "desk $list"
+  echo "ambient $list"
 }
 
 case ${1:-} in
@@ -355,9 +349,8 @@ esac
 
 command -v openrgb >/dev/null 2>&1 || exit 0
 
-mapfile -t DESK_STOPS < <(class_stops desk)
-mapfile -t AMBIENT_STOPS < <(class_stops ambient)
-(( ${#DESK_STOPS[@]} > 0 )) || exit 0
+mapfile -t STOPS < <(all_stops)
+(( ${#STOPS[@]} > 0 )) || exit 0
 
 # Runs openrgb with its output kept in the log; the exit status is the
 # caller's to report (124 is the timeout).
@@ -523,7 +516,6 @@ device_info | awk -F'|' -v order="$DEVICE_TYPE_ORDER" '
 
 args=()
 while IFS="|" read -r id mode leds name type zones multi names; do
-  if [[ " $DESK_TYPES " == *" $type "* ]]; then STOPS=("${DESK_STOPS[@]}"); else STOPS=("${AMBIENT_STOPS[@]}"); fi
   if (( ${#STOPS[@]} > 1 )); then
     # Several colours need the device in a per-LED mode: in static it keeps
     # one colour and quietly drops the rest, which is how a sync "fails".
@@ -542,7 +534,6 @@ while IFS="|" read -r id mode leds name type zones multi names; do
 done < <(device_info)
 
 if (( ${#args[@]} == 0 )); then
-  STOPS=("${DESK_STOPS[@]}")
   if (( ${#STOPS[@]} > 1 )); then
     args=(-c "$(IFS=,; echo "${STOPS[*]}")")
   else
