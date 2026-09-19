@@ -1,0 +1,114 @@
+#!/bin/bash
+
+# Apply the current Omarchy theme colour to every device OpenRGB manages.
+# Runs from Service.qml on theme change, or on its own as a theme-set hook.
+# Never fails the caller: anything missing is a silent no-op.
+
+THEME_DIR="$HOME/.local/state/omarchy/current/theme"
+OPENRGB_TIMEOUT=20
+
+# LEDs render the raw accent dim, so mix it toward white before applying and
+# run the devices at full brightness.
+BRIGHTEN_AMOUNT=0.4
+BRIGHTNESS=100
+
+command -v openrgb >/dev/null 2>&1 || exit 0
+
+# A theme that ships keyboard.rgb chose that colour for keyboards, so honour it
+# (the built-in ASUS/Framework keyboard scripts read the same file). Most
+# themes do not, so fall back to the accent every theme has in colors.toml.
+valid_hex() { [[ $1 =~ ^[0-9A-Fa-f]{6}$ ]]; }
+
+theme_color() {
+  local value
+
+  if [[ -f $THEME_DIR/keyboard.rgb ]]; then
+    value=$(<"$THEME_DIR/keyboard.rgb")
+    value="${value#\#}"
+    if valid_hex "$value"; then
+      echo "$value"
+      return
+    fi
+  fi
+
+  if [[ -f $THEME_DIR/colors.toml ]]; then
+    value=$(sed -nE 's/^[[:space:]]*accent[[:space:]]*=[[:space:]]*"?#?([0-9A-Fa-f]{6})"?.*/\1/p' "$THEME_DIR/colors.toml" | head -n1)
+    if valid_hex "$value"; then
+      echo "$value"
+      return
+    fi
+  fi
+}
+
+color=$(theme_color)
+[[ -n $color ]] || exit 0
+
+brighten_color() {
+  awk -v hex="$1" -v amount="$BRIGHTEN_AMOUNT" '
+    function hex_value(char) {
+      return index("0123456789abcdef", tolower(char)) - 1
+    }
+    function hex_pair_to_int(hex, idx) {
+      return hex_value(substr(hex, idx, 1)) * 16 + hex_value(substr(hex, idx + 1, 1))
+    }
+    BEGIN {
+      red = int(hex_pair_to_int(hex, 1) * (1 - amount) + 255 * amount + 0.5)
+      green = int(hex_pair_to_int(hex, 3) * (1 - amount) + 255 * amount + 0.5)
+      blue = int(hex_pair_to_int(hex, 5) * (1 - amount) + 255 * amount + 0.5)
+      printf "%02x%02x%02x\n", red, green, blue
+    }
+  '
+}
+
+color=$(brighten_color "$color")
+
+openrgb_call() {
+  timeout "$OPENRGB_TIMEOUT" openrgb "$@" >/dev/null 2>&1 || true
+}
+
+# A device-native gradient effect wins when one exists; everything else gets
+# the static theme accent. Detection runs once and every apply is bounded, so
+# a missing server or a slow scan never stalls the theme switch.
+devices=$(timeout "$OPENRGB_TIMEOUT" openrgb --list-devices 2>/dev/null || true)
+
+# One "<id>\t<mode>" line per device; mode is empty when it has no gradient.
+# Mode names with spaces are single-quoted by openrgb, so try a quoted
+# gradient first and fall back to a bare word.
+device_modes() {
+  awk '
+    /^[0-9]+: / {
+      if (current != "") print current "\t" mode
+      current = $1
+      sub(/:$/, "", current)
+      mode = ""
+    }
+    /^  Modes: / && current != "" {
+      modes = substr($0, 9)
+      gsub(/[\[\]]/, "", modes)
+      if (match(modes, /'"'"'[^'"'"']*[Gg]radient[^'"'"']*'"'"'/)) {
+        mode = substr(modes, RSTART + 1, RLENGTH - 2)
+      } else {
+        count = split(modes, parts, / +/)
+        for (i = 1; i <= count; i++) {
+          if (parts[i] ~ /[Gg]radient/) {
+            mode = parts[i]
+            break
+          }
+        }
+      }
+    }
+    END { if (current != "") print current "\t" mode }
+  ' <<<"$devices"
+}
+
+applied=0
+while IFS=$'\t' read -r id mode; do
+  openrgb_call -d "$id" -m "${mode:-static}" -c "$color" -b "$BRIGHTNESS"
+  applied=1
+done < <(device_modes)
+
+if (( ! applied )); then
+  openrgb_call -m static -c "$color" -b "$BRIGHTNESS"
+fi
+
+exit 0

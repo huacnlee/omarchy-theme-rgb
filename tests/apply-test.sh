@@ -1,0 +1,148 @@
+#!/bin/bash
+# Exercises bin/omarchy-openrgb-apply against a mock openrgb that records the
+# arguments it was called with, inside a throwaway HOME.
+
+set -euo pipefail
+
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+APPLY="$ROOT/bin/omarchy-openrgb-apply"
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+mock_bin="$tmp/bin"
+home="$tmp/home"
+theme="$home/.local/state/omarchy/current/theme"
+calls="$tmp/calls"
+mkdir -p "$mock_bin" "$theme"
+
+cat >"$mock_bin/openrgb" <<'SH'
+#!/bin/bash
+printf 'openrgb %s\n' "$*" >>"$CALL_LOG"
+if [[ $* == *"--list-devices"* ]]; then
+  [[ ${OPENRGB_LIST_FAIL:-0} == 1 ]] && exit 1
+  printf '%s\n' "$OPENRGB_LIST_DEVICES"
+fi
+SH
+chmod +x "$mock_bin/openrgb"
+
+failures=0
+pass() { echo "ok - $1"; }
+fail() {
+  echo "not ok - $1"
+  [[ -n ${2:-} ]] && printf '  %s\n' "$2"
+  failures=$((failures + 1))
+}
+
+# run_apply [extra PATH prefix]: runs the script with the mock on PATH.
+run_apply() {
+  : >"$calls"
+  HOME="$home" CALL_LOG="$calls" \
+    OPENRGB_LIST_DEVICES="${OPENRGB_LIST_DEVICES:-}" OPENRGB_LIST_FAIL="${OPENRGB_LIST_FAIL:-0}" \
+    PATH="${1:-}${1:+:}$mock_bin:$PATH" "$APPLY"
+}
+
+called() { grep -Fqx "$1" "$calls"; }
+call_count() { grep -c '^openrgb' "$calls" || true; }
+
+PLAIN_DEVICES='0: Logitech G512 RGB
+  Modes: [Direct] Static Off Cycle Breathing
+1: Razer Basilisk V3
+  Modes: [Direct] Off Static '"'"'Spectrum Cycle'"'"' Wave'
+
+# --- static accent reaches every detected device --------------------------
+printf '#7aa2f7\n' >"$theme/keyboard.rgb"
+OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
+if (( $(call_count) == 3 )) \
+  && called 'openrgb -d 0 -m static -c afc7fa -b 100' \
+  && called 'openrgb -d 1 -m static -c afc7fa -b 100'; then
+  pass "static accent reaches every detected device"
+else
+  fail "static accent reaches every detected device" "$(cat "$calls")"
+fi
+
+# --- gradient-capable devices prefer their gradient mode ------------------
+OPENRGB_LIST_DEVICES='0: Fake Board
+  Modes: Direct Static Gradient Wave
+1: Other Pad
+  Modes: [Direct] Off Static '"'"'Rainbow Gradient'"'"'' run_apply
+if called 'openrgb -d 0 -m Gradient -c afc7fa -b 100' \
+  && called 'openrgb -d 1 -m Rainbow Gradient -c afc7fa -b 100'; then
+  pass "gradient-capable devices prefer their gradient mode"
+else
+  fail "gradient-capable devices prefer their gradient mode" "$(cat "$calls")"
+fi
+
+# --- failed detection falls back to a static broadcast --------------------
+if OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" OPENRGB_LIST_FAIL=1 run_apply \
+  && called 'openrgb -m static -c afc7fa -b 100'; then
+  pass "failed detection falls back to a static broadcast"
+else
+  fail "failed detection falls back to a static broadcast" "$(cat "$calls")"
+fi
+
+# --- missing keyboard.rgb falls back to the colors.toml accent -------------
+rm "$theme/keyboard.rgb"
+printf 'mode = "dark"\n\naccent = "#cba6f7"\nselection = "#313244"\n' >"$theme/colors.toml"
+OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
+if called 'openrgb -d 0 -m static -c e0cafa -b 100' && ! grep -q cba6f7 "$calls"; then
+  pass "missing keyboard.rgb falls back to the colors.toml accent"
+else
+  fail "missing keyboard.rgb falls back to the colors.toml accent" "$(cat "$calls")"
+fi
+
+# --- keyboard.rgb wins over the accent when both exist --------------------
+printf '#7aa2f7\n' >"$theme/keyboard.rgb"
+OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
+if called 'openrgb -d 0 -m static -c afc7fa -b 100'; then
+  pass "keyboard.rgb wins over the accent when both exist"
+else
+  fail "keyboard.rgb wins over the accent when both exist" "$(cat "$calls")"
+fi
+
+# --- no colour source at all makes no OpenRGB calls -----------------------
+rm "$theme/keyboard.rgb" "$theme/colors.toml"
+OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
+if [[ ! -s $calls ]]; then
+  pass "no colour source at all makes no OpenRGB calls"
+else
+  fail "no colour source at all makes no OpenRGB calls" "$(cat "$calls")"
+fi
+
+# --- an invalid keyboard.rgb is skipped in favour of the accent -----------
+printf 'not-a-color\n' >"$theme/keyboard.rgb"
+printf 'accent = "#cba6f7"\n' >"$theme/colors.toml"
+OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
+if called 'openrgb -d 0 -m static -c e0cafa -b 100'; then
+  pass "an invalid keyboard.rgb is skipped in favour of the accent"
+else
+  fail "an invalid keyboard.rgb is skipped in favour of the accent" "$(cat "$calls")"
+fi
+
+# --- an invalid colour everywhere makes no OpenRGB calls ------------------
+printf 'accent = "purple"\n' >"$theme/colors.toml"
+OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
+if [[ ! -s $calls ]]; then
+  pass "an invalid colour everywhere makes no OpenRGB calls"
+else
+  fail "an invalid colour everywhere makes no OpenRGB calls" "$(cat "$calls")"
+fi
+rm "$theme/keyboard.rgb"
+printf '#7aa2f7\n' >"$theme/keyboard.rgb"
+
+# --- a missing openrgb binary is a silent no-op ---------------------------
+no_openrgb="$tmp/no-openrgb"
+mkdir -p "$no_openrgb"
+: >"$calls"
+if HOME="$home" CALL_LOG="$calls" PATH="$no_openrgb" /bin/bash "$APPLY" && [[ ! -s $calls ]]; then
+  pass "a missing openrgb binary is a silent no-op"
+else
+  fail "a missing openrgb binary is a silent no-op" "$(cat "$calls")"
+fi
+
+echo
+if (( failures > 0 )); then
+  echo "$failures failing"
+  exit 1
+fi
+echo "all passing"
