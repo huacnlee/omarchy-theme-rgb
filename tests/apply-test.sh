@@ -157,43 +157,43 @@ fi
 # three and five colours: the theme's roles, by what each device is for
 # ==========================================================================
 
-# --- 3 colours are accent, background, foreground everywhere --------------
+# --- 3 colours are accent, foreground, blue everywhere; never background --
 set_config '{"mode": "palette", "colors": 3}'
-if [[ $(stops) == 0000ff,001000,ffffff && $(stops ambient) == 0000ff,001000,ffffff ]]; then
-  pass "3 colours are accent, background, foreground everywhere"
+if [[ $(stops) == 0000ff,ffffff,0080ff && $(stops ambient) == 0000ff,ffffff,0080ff ]]; then
+  pass "3 colours are accent, foreground, blue everywhere; never background"
 else
-  fail "3 colours are accent, background, foreground everywhere" "$(stops) / $(stops ambient)"
+  fail "3 colours are accent, foreground, blue everywhere; never background" "$(stops) / $(stops ambient)"
 fi
 
-# --- 5 colours add blue and yellow on the desk, blue and magenta around it -
+# --- 5 colours add yellow and red on the desk, magenta and cyan around it -
 set_config '{"mode": "palette", "colors": 5}'
-if [[ $(stops) == 0000ff,001000,ffffff,0080ff,ffff00 && $(stops ambient) == 0000ff,001000,ffffff,0080ff,ff00ff ]]; then
-  pass "5 colours add blue and yellow on the desk, blue and magenta around it"
+if [[ $(stops) == 0000ff,ffffff,0080ff,ffff00,ff0000 && $(stops ambient) == 0000ff,ffffff,0080ff,ff00ff,00ffff ]]; then
+  pass "5 colours add yellow and red on the desk, magenta and cyan around it"
 else
-  fail "5 colours add blue and yellow on the desk, blue and magenta around it" "$(stops) / $(stops ambient)"
+  fail "5 colours add yellow and red on the desk, magenta and cyan around it" "$(stops) / $(stops ambient)"
 fi
 
-# --- 8 colours carry on with red, green, magenta on the desk; cyan, red, green around it
+# --- 8 colours carry on with green, magenta, cyan on the desk; red, green, yellow around it
 set_config '{"mode": "palette", "colors": 8}'
-if [[ $(stops) == 0000ff,001000,ffffff,0080ff,ffff00,ff0000,00ff00,ff00ff && $(stops ambient) == 0000ff,001000,ffffff,0080ff,ff00ff,00ffff,ff0000,00ff00 ]]; then
-  pass "8 colours carry on with red, green, magenta on the desk; cyan, red, green around it"
+if [[ $(stops) == 0000ff,ffffff,0080ff,ffff00,ff0000,00ff00,ff00ff,00ffff && $(stops ambient) == 0000ff,ffffff,0080ff,ff00ff,00ffff,ff0000,00ff00,ffff00 ]]; then
+  pass "8 colours carry on with green, magenta, cyan on the desk; red, green, yellow around it"
 else
-  fail "8 colours carry on with red, green, magenta on the desk; cyan, red, green around it" "$(stops) / $(stops ambient)"
+  fail "8 colours carry on with green, magenta, cyan on the desk; red, green, yellow around it" "$(stops) / $(stops ambient)"
 fi
 
 # --- missing config means 5 colours ---------------------------------------
 rm "$home/.config/omarchy/theme-rgb.json"
-if [[ $(stops) == 0000ff,001000,ffffff,0080ff,ffff00 ]]; then
+if [[ $(stops) == 0000ff,ffffff,0080ff,ffff00,ff0000 ]]; then
   pass "missing config means 5 colours"
 else
   fail "missing config means 5 colours" "$(stops)"
 fi
 
 # --- a missing variable and a repeated hex are skipped, the next moves up --
-# No foreground here, and blue is the accent's hex again: yellow moves up.
+# No foreground here, and blue is the accent's hex again: yellow, red move up.
 printf 'accent = "#0000ff"\nbackground = "#001000"\nyellow = "#ffff00"\nblue = "#0000ff"\nred = "#ff0000"\n' >"$theme/colors.toml"
 set_config '{"mode": "palette", "colors": 3}'
-if [[ $(stops) == 0000ff,001000,ffff00 ]]; then
+if [[ $(stops) == 0000ff,ffff00,ff0000 ]]; then
   pass "a missing variable and a repeated hex are skipped, the next moves up"
 else
   fail "a missing variable and a repeated hex are skipped, the next moves up" "$(stops)"
@@ -234,7 +234,7 @@ OPENRGB_LIST_DEVICES='0: ENE DRAM
   Type:           Keyboard
   Modes: [Direct] Static
   LEDs: a b c d e ' run_apply
-if called 'openrgb -d 0 -m direct -c 0000ff,001000,ffffff,00ff00,ff00ff -d 1 -m direct -c 0000ff,001000,ffffff,00ff00,ffff00'; then
+if called 'openrgb -d 0 -m direct -c 0000ff,ffffff,00ff00,ff00ff -d 1 -m direct -c 0000ff,ffffff,00ff00,ffff00'; then
   pass "each device gets its own class's colours in the one call"
 else
   fail "each device gets its own class's colours in the one call" "$(cat "$calls")"
@@ -242,7 +242,7 @@ fi
 
 # --- failed detection broadcasts the desk colours -------------------------
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" OPENRGB_LIST_FAIL=1 run_apply
-if called 'openrgb -c 0000ff,001000,ffffff,00ff00,ffff00'; then
+if called 'openrgb -c 0000ff,ffffff,00ff00,ffff00'; then
   pass "failed detection broadcasts the desk colours"
 else
   fail "failed detection broadcasts the desk colours" "$(cat "$calls")"
@@ -332,7 +332,7 @@ fi
 # a dark background is a dark glow, not a computed bright hue.
 printf 'accent = "#d84a33"\nbackground = "#11111b"\n' >"$theme/colors.toml"
 set_config '{"mode": "palette", "colors": 3}'
-if [[ $(stops) == d84a33,11111b ]]; then
+if [[ $(stops) == d84a33 ]]; then
   pass "colours are sent exactly as the theme defines them"
 else
   fail "colours are sent exactly as the theme defines them" "$(stops)"

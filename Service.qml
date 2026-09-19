@@ -27,8 +27,8 @@ Item {
   // everything else is ambient.
   property var deskRoles: []
   property var ambientRoles: []
-  readonly property var defaultDeskRoles: ["accent", "background", "foreground", "blue", "yellow", "red", "green", "magenta", "cyan", "orange", "brown"]
-  readonly property var defaultAmbientRoles: ["accent", "background", "foreground", "blue", "magenta", "cyan", "red", "green", "yellow", "orange", "brown"]
+  readonly property var defaultDeskRoles: ["accent", "foreground", "blue", "yellow", "red", "green", "magenta", "cyan", "orange", "brown"]
+  readonly property var defaultAmbientRoles: ["accent", "foreground", "blue", "magenta", "cyan", "red", "green", "yellow", "orange", "brown"]
   property int colors: 5
   property var custom: []
   property int brightness: 100
