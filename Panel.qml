@@ -503,7 +503,8 @@ Panel {
                 id: deviceLeds
                 anchors.right: deviceRow.right
                 anchors.verticalCenter: deviceRow.verticalCenter
-                text: deviceRow.modelData.leds > 0 ? deviceRow.modelData.leds + " LEDs" : ""
+                text: [deviceRow.modelData.type, deviceRow.modelData.leds > 0 ? deviceRow.modelData.leds + " LEDs" : ""]
+                  .filter(function(v) { return v !== "" }).join(" · ")
                 color: themeRgb.dim
                 font.family: themeRgb.fontFamily
                 font.pixelSize: Style.font.caption

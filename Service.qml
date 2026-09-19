@@ -31,7 +31,7 @@ Item {
   property var variables: []
   // "#rrggbb" colours the script will light, for the preview.
   property var stops: []
-  // [{ id, name, leds }] found on the last apply.
+  // [{ id, name, leds, type }] found on the last apply, desk peripherals first.
   property var devices: []
 
   property bool openrgbPresent: false
@@ -169,7 +169,7 @@ Item {
       for (var i = 0; i < lines.length; i++) {
         var parts = lines[i].split("|")
         if (parts.length < 3) continue
-        next.push({ id: parts[0], name: parts[1], leds: Number(parts[2]) || 0 })
+        next.push({ id: parts[0], name: parts[1], leds: Number(parts[2]) || 0, type: parts[3] || "" })
       }
       root.devices = next
     }

@@ -349,20 +349,41 @@ else
   fail "bands: LEDs split evenly, remainder goes to the last colours" "$(cat "$calls")"
 fi
 
-# --- every apply records the devices it found for the panel ---------------
+# --- every apply records the devices it found, desk peripherals first ------
 devices_file="$home/.local/state/omarchy/theme-rgb/devices"
-OPENRGB_LIST_DEVICES='0: Logitech G512 RGB
+OPENRGB_LIST_DEVICES='0: ENE DRAM
+  Type:           DRAM
+  Modes: Direct Static
+  LEDs: a b c d
+1: ASUS TUF GAMING B760M-PLUS
+  Type:           Motherboard
   Modes: [Direct] Static
-  LEDs: a b c
-1: Razer Basilisk V3
+  LEDs: '"'"'Aura Mainboard, LED 1'"'"'
+2: Razer Basilisk V3
+  Type:           Mouse
   Modes: [Direct] Off Static
-  LEDs: Logo '"'"'Scroll Wheel'"'"'' run_apply
-expected='0|Logitech G512 RGB|3
-1|Razer Basilisk V3|2'
+  LEDs: Logo '"'"'Scroll Wheel'"'"'
+3: LG 27GN950-B Monitor
+  Type:           Monitor
+  Modes: [Direct] Static
+  LEDs: a b
+4: Razer Blackwidow V3
+  Type:           Keyboard
+  Modes: [Direct] Static
+  LEDs: '"'"'Key: Escape'"'"' '"'"'Key: F1'"'"' '"'"'Key: F2'"'"'
+5: Mystery Thing
+  Modes: Direct
+  LEDs: a' run_apply
+expected='4|Razer Blackwidow V3|3|Keyboard
+2|Razer Basilisk V3|2|Mouse
+3|LG 27GN950-B Monitor|2|Monitor
+1|ASUS TUF GAMING B760M-PLUS|1|Motherboard
+0|ENE DRAM|4|DRAM
+5|Mystery Thing|1|'
 if [[ -f $devices_file && $(cat "$devices_file") == "$expected" ]]; then
-  pass "every apply records the devices it found for the panel"
+  pass "every apply records the devices it found, desk peripherals first"
 else
-  fail "every apply records the devices it found for the panel" "$(cat "$devices_file" 2>&1)"
+  fail "every apply records the devices it found, desk peripherals first" "$(cat "$devices_file" 2>&1)"
 fi
 
 # --- failed detection leaves the device list empty ------------------------

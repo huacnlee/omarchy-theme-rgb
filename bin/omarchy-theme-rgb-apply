@@ -12,8 +12,11 @@
 
 THEME_DIR="$HOME/.local/state/omarchy/current/theme"
 CONFIG="$HOME/.config/omarchy/theme-rgb.json"
-# "<id>|<name>|<leds>" per device found on the last apply, for the panel.
+# "<id>|<name>|<leds>|<type>" per device found on the last apply, for the
+# panel: what sits on the desk first, then the screen, then what is in the
+# case.
 DEVICES_FILE="$HOME/.local/state/omarchy/theme-rgb/devices"
+DEVICE_TYPE_ORDER="Keyboard Mouse Mousemat Headset HeadsetStand Gamepad Monitor Speaker Light LEDStrip Motherboard DRAM GPU Cooler Case Storage Accessory"
 OPENRGB_TIMEOUT=30
 
 # The theme variables a user may light, in the order the panel shows them.
@@ -241,13 +244,13 @@ openrgb_call() {
 # slow scan never stalls the theme switch.
 devices=$(timeout "$OPENRGB_TIMEOUT" openrgb --list-devices 2>/dev/null || true)
 
-# One "<id>|<mode>|<leds>|<name>" line per device: mode is the device's own
-# gradient effect if it has one (single mode uses it), leds is how many LEDs
-# it lists. Mode and LED names with spaces are single-quoted by openrgb.
+# One "<id>|<mode>|<leds>|<name>|<type>" line per device: mode is the device's
+# own gradient effect if it has one (single mode uses it), leds is how many
+# LEDs it lists. Mode and LED names with spaces are single-quoted by openrgb.
 device_info() {
   awk '
     function flush() {
-      if (current != "") print current "|" mode "|" leds "|" name
+      if (current != "") print current "|" mode "|" leds "|" name "|" type
     }
     /^[0-9]+: / {
       flush()
@@ -256,6 +259,10 @@ device_info() {
       name = substr($0, length(current) + 3)
       mode = ""
       leds = 0
+      type = ""
+    }
+    /^  Type: / && current != "" {
+      type = $2
     }
     /^  Modes: / && current != "" {
       modes = substr($0, 9)
@@ -312,10 +319,13 @@ led_colors() {
 # hardware this was verified against they stay put. Brightness is already in
 # the colour values, so modes run at full brightness.
 mkdir -p "$(dirname "$DEVICES_FILE")"
-device_info | awk -F'|' '{ print $1 "|" $4 "|" $3 }' >"$DEVICES_FILE"
+device_info | awk -F'|' -v order="$DEVICE_TYPE_ORDER" '
+  BEGIN { n = split(order, types, " "); for (i = 1; i <= n; i++) rank[types[i]] = i }
+  { r = ($5 in rank) ? rank[$5] : n + 1; printf "%03d %03d %s|%s|%s|%s\n", r, NR, $1, $4, $3, $5 }
+' | sort | cut -d' ' -f3- >"$DEVICES_FILE"
 
 args=()
-while IFS="|" read -r id mode leds name; do
+while IFS="|" read -r id mode leds name type; do
   if (( ${#STOPS[@]} > 1 )); then
     args+=(-d "$id" -c "$(led_colors "$leds")")
   else
