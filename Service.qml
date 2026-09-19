@@ -21,8 +21,8 @@ Item {
 
   // What theme-rgb.json says, with the script's defaults.
   property string mode: "palette"        // "single" | "palette" | "custom"
-  property string single: ""             // "" = keyboard.rgb, else accent
-  property string anchor: "accent"
+  property string single: ""             // "" = the script's default (background, else accent)
+  property string anchor: ""             // "" = the same default
   property int colors: 5
   property var custom: []
   property int brightness: 100
@@ -62,7 +62,7 @@ Item {
     if (!parsed || typeof parsed !== "object") parsed = {}
     mode = parsed.mode === "single" || parsed.mode === "custom" ? parsed.mode : "palette"
     single = typeof parsed.single === "string" ? parsed.single : ""
-    anchor = typeof parsed.anchor === "string" && parsed.anchor !== "" ? parsed.anchor : "accent"
+    anchor = typeof parsed.anchor === "string" ? parsed.anchor : ""
     var n = Number(parsed.colors)
     colors = n === 3 ? 3 : 5
     custom = Array.isArray(parsed.custom) ? parsed.custom.map(function(v) { return String(v) }) : []

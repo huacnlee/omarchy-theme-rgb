@@ -27,8 +27,8 @@ VARIABLES="accent background red orange yellow green cyan blue magenta brown for
 # --- configuration --------------------------------------------------------
 
 MODE=palette
-SINGLE=""          # empty: keyboard.rgb if the theme ships one, else accent
-ANCHOR=accent
+SINGLE=""          # empty: the default variable (see default_variable)
+ANCHOR=""          # empty: the default variable
 COLORS=5
 CUSTOM=""
 BRIGHTNESS=100
@@ -194,6 +194,33 @@ variable_color() {
   theme_variables | awk -v name="$1" '$1 == name { print $2; exit }'
 }
 
+# HSV saturation 0..1 of a hex colour: below 0.15 there is no hue to follow.
+has_hue() {
+  awk -v hex="$1" '
+    function hex_value(char) { return index("0123456789abcdef", tolower(char)) - 1 }
+    function channel(hex, idx) { return hex_value(substr(hex, idx, 1)) * 16 + hex_value(substr(hex, idx + 1, 1)) }
+    BEGIN {
+      r = channel(hex, 1); g = channel(hex, 3); b = channel(hex, 5)
+      mx = r; if (g > mx) mx = g; if (b > mx) mx = b
+      mn = r; if (g < mn) mn = g; if (b < mn) mn = b
+      exit (mx > 0 && (mx - mn) / mx >= 0.15) ? 0 : 1
+    }
+  '
+}
+
+# What lights when the user has not chosen: the background, because the
+# wallpaper and window backgrounds are what a theme looks like; the accent
+# when the background is a plain grey with no hue to follow.
+default_variable() {
+  local bg
+  bg=$(variable_color background)
+  if [[ -n $bg ]] && has_hue "$bg"; then
+    echo background
+  else
+    echo accent
+  fi
+}
+
 # Theme colours nearest the anchor on the hue wheel, and never more than 90
 # degrees from it, so the light reads as this theme rather than as a rainbow:
 # a theme short of nearby hues lights fewer colours rather than its opposite
@@ -201,7 +228,7 @@ variable_color() {
 # Prints nothing when the theme cannot support it (grey anchor, nothing else
 # saturated nearby).
 palette_colors() {
-  theme_variables | awk -v want="$COLORS" -v anchor="$ANCHOR" '
+  theme_variables | awk -v want="$COLORS" -v anchor="${ANCHOR:-$(default_variable)}" '
     function hex_value(char) {
       return index("0123456789abcdef", tolower(char)) - 1
     }
@@ -232,6 +259,7 @@ palette_colors() {
       return d
     }
     $1 == "foreground" { next }
+    $1 == "background" && $1 != anchor { next }
     { total++; names[total] = $1; value[$1] = $2 }
     END {
       if (!(anchor in value)) exit
@@ -288,17 +316,19 @@ custom_colors() {
   done
 }
 
-# One colour: the chosen variable, else the theme's keyboard.rgb (the file
-# Omarchy's own keyboard scripts read) when it ships one, else the accent.
+# One colour: the chosen variable; else the default variable, except that a
+# theme shipping keyboard.rgb (the file Omarchy's own keyboard scripts read)
+# gets that colour when the default would be the accent anyway.
 single_color() {
-  local value
+  local value name
 
   if [[ -n $SINGLE ]]; then
     variable_color "$SINGLE"
     return
   fi
 
-  if [[ -f $THEME_DIR/keyboard.rgb ]]; then
+  name=$(default_variable)
+  if [[ $name == accent && -f $THEME_DIR/keyboard.rgb ]]; then
     value=$(<"$THEME_DIR/keyboard.rgb")
     value="${value#\#}"
     if valid_hex "$value"; then
@@ -307,7 +337,7 @@ single_color() {
     fi
   fi
 
-  variable_color accent
+  variable_color "$name"
 }
 
 # A screen value is sRGB-encoded; an LED channel is linear light, so a mixed

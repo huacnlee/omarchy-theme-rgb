@@ -256,6 +256,35 @@ else
   fail "LED gamma: minor channels follow sRGB to linear, the brightest stays" "$(stops)"
 fi
 
+# --- with no choice made, the background's hue is what lights -------------
+# The wallpaper and window backgrounds are what a theme looks like; their
+# dark tone is lit at full value.
+printf 'accent = "#ff0000"\nbackground = "#11111b"\n' >"$theme/colors.toml"
+rm -f "$theme/keyboard.rgb" "$home/.config/omarchy/theme-rgb.json"
+set_config '{"mode": "single"}'
+if [[ $(stops) == 5c5cff ]]; then
+  pass "with no choice made, the background's hue is what lights"
+else
+  fail "with no choice made, the background's hue is what lights" "$(stops)"
+fi
+
+# --- a grey background has no hue, so the accent is the default ------------
+printf 'accent = "#ff0000"\nbackground = "#1a1a1a"\n' >"$theme/colors.toml"
+if [[ $(stops) == ff0000 ]]; then
+  pass "a grey background has no hue, so the accent is the default"
+else
+  fail "a grey background has no hue, so the accent is the default" "$(stops)"
+fi
+
+# --- palette tiers revolve around the background by default ---------------
+printf 'accent = "#ff0000"\nbackground = "#000010"\nred = "#ff0000"\nblue = "#0000ff"\ncyan = "#00ffff"\n' >"$theme/colors.toml"
+set_config '{"mode": "palette", "colors": 3}'
+if [[ $(stops | paste -sd,) == 00ffff,0000ff,0000ff ]]; then
+  pass "palette tiers revolve around the background by default"
+else
+  fail "palette tiers revolve around the background by default" "$(stops | paste -sd,)"
+fi
+
 # ==========================================================================
 # choosing variables, custom lists and brightness
 # ==========================================================================

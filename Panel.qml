@@ -52,9 +52,15 @@ Panel {
   readonly property bool syncing: service ? service.syncing : false
 
   // The variable the swatch row treats as selected in single-select modes.
+  // Unset means the script's default: the background when it has a hue.
+  readonly property string defaultVariable: {
+    for (var i = 0; i < variables.length; i++)
+      if (variables[i].name === "background") return "background"
+    return "accent"
+  }
   readonly property string selectedVariable: mode === "single"
-    ? (service && service.single !== "" ? service.single : "accent")
-    : (service ? service.anchor : "accent")
+    ? (service && service.single !== "" ? service.single : defaultVariable)
+    : (service && service.anchor !== "" ? service.anchor : defaultVariable)
 
   // What is actually lit: a theme may not have five distinct hues to offer.
   // Anything that needs attention takes this line over.

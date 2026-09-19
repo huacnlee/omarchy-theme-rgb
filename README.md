@@ -36,8 +36,11 @@ Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
     rainbow. Greys and near-duplicate hues are skipped, so a theme may offer
     fewer than asked.
   - *Custom* lights exactly the variables you pick, in the order you pick them.
-- **Theme colour** — swatches of the current theme's `accent red orange yellow
-  green cyan blue magenta brown foreground`, as `colors.toml` defines them.
+- **Theme colour** — swatches of the current theme's `accent background red
+  orange yellow green cyan blue magenta brown foreground`, as `colors.toml`
+  defines them. Until you choose, the background is used: the wallpaper and
+  window backgrounds are what a theme looks like. Dark tones are lit at full
+  strength, so a navy background lights as that blue.
 - **Layout** — where several colours go. *Flow* lays bands along each
   device's LEDs (top to bottom on most keyboards). On keyboards, *Rows* and
   *Columns* place the bands by where each key actually sits, and *Zones*
@@ -67,8 +70,8 @@ editing it by hand applies too:
 ```json
 {
   "mode": "palette",
-  "single": "accent",
-  "anchor": "accent",
+  "single": "",
+  "anchor": "",
   "colors": 5,
   "custom": [],
   "brightness": 100,
