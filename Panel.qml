@@ -353,8 +353,13 @@ Panel {
             focusable: false
             cursorIndex: themeRgb.cursorActive && themeRgb.cursorRow === "mode" ? themeRgb.cursorIndex : -1
             onChanged: function(v) { themeRgb.chooseMode(v) }
+            // The pointer drives the same cursor the keys move; leaving the chip
+            // it sits on clears it, so nothing stays lit behind the pointer.
             onHovered: function(index, isHovered) {
-              if (!isHovered) return
+              if (!isHovered) {
+                if (themeRgb.cursorRow === "mode" && themeRgb.cursorIndex === index) themeRgb.cursorActive = false
+                return
+              }
               themeRgb.cursorActive = true
               themeRgb.cursorRow = "mode"
               themeRgb.cursorIndex = index
@@ -383,8 +388,13 @@ Panel {
             focusable: false
             cursorIndex: themeRgb.cursorActive && themeRgb.cursorRow === "layout" ? themeRgb.cursorIndex : -1
             onChanged: function(v) { themeRgb.chooseLayout(v) }
+            // The pointer drives the same cursor the keys move; leaving the chip
+            // it sits on clears it, so nothing stays lit behind the pointer.
             onHovered: function(index, isHovered) {
-              if (!isHovered) return
+              if (!isHovered) {
+                if (themeRgb.cursorRow === "layout" && themeRgb.cursorIndex === index) themeRgb.cursorActive = false
+                return
+              }
               themeRgb.cursorActive = true
               themeRgb.cursorRow = "layout"
               themeRgb.cursorIndex = index
