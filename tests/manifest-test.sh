@@ -9,7 +9,7 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 fail() { echo "not ok - $*" >&2; exit 1; }
 
 [[ $(jq -r '.schemaVersion' manifest.json) == 1 ]] || fail "schemaVersion must be 1"
-[[ $(jq -r '.id' manifest.json) == huacnlee.theme-rgb ]] || fail "id must be huacnlee.theme-rgb"
+[[ $(jq -r '.id' manifest.json) == huacnlee.theme_rgb ]] || fail "id must be huacnlee.theme_rgb"
 [[ $(jq -r '.name' manifest.json) == "Theme RGB" ]] || fail "name must be Theme RGB"
 [[ $(jq -c '.kinds' manifest.json) == '["service","bar-widget"]' ]] || fail "kinds must be [service, bar-widget]"
 [[ $(jq -r '.entryPoints.service' manifest.json) == Service.qml ]] || fail "service entry point must be Service.qml"
@@ -31,7 +31,7 @@ grep -q 'omarchy/theme-rgb.json' Service.qml || fail "Service.qml must watch the
 # The panel only shows that state and forwards the user's choice.
 grep -q '"stops"' Service.qml || fail "Service.qml must preview via the stops subcommand"
 grep -q 'function setChoice' Service.qml || fail "Service.qml must expose setChoice"
-grep -q 'moduleName: "huacnlee.theme-rgb"' Panel.qml || fail "Panel.qml must declare moduleName huacnlee.theme-rgb"
+grep -q 'moduleName: "huacnlee.theme_rgb"' Panel.qml || fail "Panel.qml must declare moduleName huacnlee.theme_rgb"
 grep -q 'serviceFor(moduleName)' Panel.qml || fail "Panel.qml must look up its own service"
 grep -q 'service.setChoice' Panel.qml || fail "Panel.qml must forward choices to the service"
 ! grep -q 'omarchy-theme-rgb-apply' Panel.qml || fail "Panel.qml must not run the script itself"

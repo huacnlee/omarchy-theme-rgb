@@ -132,7 +132,7 @@ Item {
     onExited: function(exitCode) {
       root.syncing = false
       root.lastSyncFailed = exitCode !== 0
-      if (exitCode !== 0) console.warn("huacnlee.theme-rgb: apply exited with " + exitCode)
+      if (exitCode !== 0) console.warn("huacnlee.theme_rgb: apply exited with " + exitCode)
       else root.lastSyncedAt = Qt.formatTime(new Date(), "HH:mm")
       if (root.applyPending) {
         root.applyPending = false

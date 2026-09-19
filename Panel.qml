@@ -9,8 +9,8 @@ import qs.Ui
 // `stops` the script sends to the hardware, so what you see is what lights.
 Panel {
   id: themeRgb
-  moduleName: "huacnlee.theme-rgb"
-  ipcTarget: "huacnlee.theme-rgb"
+  moduleName: "huacnlee.theme_rgb"
+  ipcTarget: "huacnlee.theme_rgb"
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family

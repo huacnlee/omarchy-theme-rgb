@@ -1,5 +1,5 @@
 QMLLINT := /usr/lib/qt6/bin/qmllint
-PLUGIN_ID := huacnlee.theme-rgb
+PLUGIN_ID := huacnlee.theme_rgb
 PLUGIN_LINK := $(HOME)/.config/omarchy/plugins/$(PLUGIN_ID)
 
 .PHONY: test qml-check validate install uninstall apply
@@ -32,7 +32,11 @@ install:
 	mkdir -p $(dir $(PLUGIN_LINK))
 	ln -sfn $(CURDIR) $(PLUGIN_LINK)
 	omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
-	omarchy plugin enable $(PLUGIN_ID)
+	@for i in $$(seq 1 40); do \
+	  omarchy plugin list --json 2>/dev/null | jq -e 'any(.[]; .id == "$(PLUGIN_ID)")' >/dev/null && break; \
+	  sleep 0.1; \
+	done
+	omarchy plugin enable $(PLUGIN_ID) --section right
 
 uninstall:
 	-omarchy plugin disable $(PLUGIN_ID)

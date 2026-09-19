@@ -19,7 +19,7 @@ omarchy plugin add https://github.com/huacnlee/omarchy-theme-rgb.git --enable
 That is all. The plugin runs as a service inside `omarchy-shell`: it syncs once
 when the shell starts and again every time `omarchy theme set` finishes.
 
-Remove it with `omarchy plugin remove huacnlee.theme-rgb`.
+Remove it with `omarchy plugin remove huacnlee.theme_rgb`.
 
 ## What colour it picks
 

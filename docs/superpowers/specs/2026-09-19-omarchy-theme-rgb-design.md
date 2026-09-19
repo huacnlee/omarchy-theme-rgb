@@ -6,7 +6,7 @@ installable plugin instead of a change to Omarchy itself.
 
 ## Shape
 
-- `manifest.json` — id `huacnlee.theme-rgb`, name "Theme RGB", `kinds: ["service"]`,
+- `manifest.json` — id `huacnlee.theme_rgb`, name "Theme RGB", `kinds: ["service"]`,
   `entryPoints.service = "Service.qml"`.
 - `Service.qml` — runs inside omarchy-shell. Applies once when the service is
   created (shell start / plugin enable) and again whenever
