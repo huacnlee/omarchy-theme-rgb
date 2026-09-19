@@ -1,4 +1,4 @@
-# omarchy-openrgb
+# omarchy-theme-rgb
 
 Keeps every device [OpenRGB](https://openrgb.org) manages in the colour of the
 current [Omarchy](https://omarchy.org) theme. Switch themes and your keyboard,
@@ -13,13 +13,13 @@ as a shell plugin you can add and remove.
 
 ```bash
 sudo pacman -S openrgb      # if you do not have it yet
-omarchy plugin add https://github.com/huacnlee/omarchy-openrgb.git --enable
+omarchy plugin add https://github.com/huacnlee/omarchy-theme-rgb.git --enable
 ```
 
 That is all. The plugin runs as a service inside `omarchy-shell`: it syncs once
 when the shell starts and again every time `omarchy theme set` finishes.
 
-Remove it with `omarchy plugin remove huacnlee.openrgb`.
+Remove it with `omarchy plugin remove huacnlee.theme-rgb`.
 
 ## What colour it picks
 
@@ -32,7 +32,7 @@ look dim on hardware) and applied at full brightness. Devices that offer a
 `Gradient` mode get that mode; everything else gets `static`.
 
 Nothing is configurable yet; the constants sit at the top of
-`bin/omarchy-openrgb-apply`.
+`bin/omarchy-theme-rgb-apply`.
 
 ## Speed
 
@@ -48,11 +48,11 @@ openrgb --server --startminimized &   # or `openrgb --autostart-enable "--server
 
 ## Without the shell plugin
 
-`bin/omarchy-openrgb-apply` is plain bash with no dependency on the shell. To
+`bin/omarchy-theme-rgb-apply` is plain bash with no dependency on the shell. To
 use it as a theme hook instead:
 
 ```bash
-omarchy hook install theme-set bin/omarchy-openrgb-apply
+omarchy hook install theme-set bin/omarchy-theme-rgb-apply
 ```
 
 ## Development

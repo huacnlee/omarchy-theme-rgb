@@ -6,18 +6,18 @@ installable plugin instead of a change to Omarchy itself.
 
 ## Shape
 
-- `manifest.json` — id `huacnlee.openrgb`, name "OpenRGB", `kinds: ["service"]`,
+- `manifest.json` — id `huacnlee.theme-rgb`, name "Theme RGB", `kinds: ["service"]`,
   `entryPoints.service = "Service.qml"`.
 - `Service.qml` — runs inside omarchy-shell. Applies once when the service is
   created (shell start / plugin enable) and again whenever
   `~/.local/state/omarchy/current/theme.name` changes. `omarchy-theme-set`
   writes that file only after the new theme directory has replaced `current/
   theme`, so the colour files are already the new theme's when the watch fires.
-  Runs `bash <plugin dir>/bin/omarchy-openrgb-apply` through a `Process`; a
+  Runs `bash <plugin dir>/bin/omarchy-theme-rgb-apply` through a `Process`; a
   change arriving while one run is in flight sets a pending flag and re-runs
   once on exit (no concurrent OpenRGB calls). Failures are logged with
   `console.warn` and never propagate.
-- `bin/omarchy-openrgb-apply` — plain bash, usable on its own as a `theme-set`
+- `bin/omarchy-theme-rgb-apply` — plain bash, usable on its own as a `theme-set`
   hook. Exit 0 always.
   1. No `openrgb` on PATH → exit.
   2. Colour: `current/theme/keyboard.rgb` if it holds a valid 6-digit hex;
@@ -47,11 +47,11 @@ the user picks how many theme colours are used from a bar panel.
 
 ### Configuration
 
-`~/.config/omarchy/openrgb.json`: `{"mode": "single" | "palette", "colors": 2 | 3 | 5}`.
+`~/.config/omarchy/theme-rgb.json`: `{"mode": "single" | "palette", "colors": 2 | 3 | 5}`.
 Missing file or field → `palette`, `5`. Both `Service.qml` and the panel watch
 the file; the script reads it with `jq`.
 
-### Colour selection (bin/omarchy-openrgb-apply)
+### Colour selection (bin/omarchy-theme-rgb-apply)
 
 - `single`: as before (keyboard.rgb → accent, `-m static`).
 - `palette`: candidates are `accent` plus `red orange yellow green cyan blue
@@ -66,7 +66,7 @@ the file; the script reads it with `jq`.
   interpolated to that many colours and sent as `-d N -c c1,c2,…` with no
   `-m` (verified on ENE DRAM and Razer: per-LED writes persist). Still one
   probe plus one chained call.
-- `omarchy-openrgb-apply stops` prints the stops for the current theme and
+- `omarchy-theme-rgb-apply stops` prints the stops for the current theme and
   config, one hex per line, without touching OpenRGB. The panel preview uses
   it so the UI and the hardware share one implementation.
 
@@ -76,5 +76,5 @@ the file; the script reads it with `jq`.
 A palette glyph in the bar; the popout has one row of four buttons — Single /
 2 colours / 3 colours / 5 colours — a preview strip drawn from `stops`, a
 "Sync now" button and a last-sync status line. Choosing a button writes
-`openrgb.json`; the service applies it. Not placing the widget leaves the
+`theme-rgb.json`; the service applies it. Not placing the widget leaves the
 service running on defaults.

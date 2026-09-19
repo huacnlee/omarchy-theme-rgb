@@ -1,5 +1,5 @@
 QMLLINT := /usr/lib/qt6/bin/qmllint
-PLUGIN_ID := huacnlee.openrgb
+PLUGIN_ID := huacnlee.theme-rgb
 PLUGIN_LINK := $(HOME)/.config/omarchy/plugins/$(PLUGIN_ID)
 
 .PHONY: test qml-check validate install uninstall apply
@@ -20,7 +20,7 @@ validate: test qml-check
 
 # Run the colour sync once by hand, outside the shell.
 apply:
-	bin/omarchy-openrgb-apply
+	bin/omarchy-theme-rgb-apply
 
 # Symlinks this checkout into ~/.config/omarchy/plugins so edits are read
 # live. Development only — users install with `omarchy plugin add`.

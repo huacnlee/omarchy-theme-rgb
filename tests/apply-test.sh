@@ -1,11 +1,11 @@
 #!/bin/bash
-# Exercises bin/omarchy-openrgb-apply against a mock openrgb that records the
+# Exercises bin/omarchy-theme-rgb-apply against a mock openrgb that records the
 # arguments it was called with, inside a throwaway HOME.
 
 set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-APPLY="$ROOT/bin/omarchy-openrgb-apply"
+APPLY="$ROOT/bin/omarchy-theme-rgb-apply"
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT

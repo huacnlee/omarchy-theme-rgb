@@ -3,7 +3,7 @@ import Quickshell
 import Quickshell.Io
 
 // Retints OpenRGB devices whenever the Omarchy theme changes. The colour maths
-// and device handling live in bin/omarchy-openrgb-apply so they can be tested
+// and device handling live in bin/omarchy-theme-rgb-apply so they can be tested
 // (and reused as a plain theme-set hook) without a running shell; this file
 // only decides *when* to run it.
 Item {
@@ -14,7 +14,7 @@ Item {
   property var manifest: null
 
   readonly property string home: Quickshell.env("HOME")
-  readonly property string applyScript: localPath(Qt.resolvedUrl("bin/omarchy-openrgb-apply"))
+  readonly property string applyScript: localPath(Qt.resolvedUrl("bin/omarchy-theme-rgb-apply"))
 
   property bool applyPending: false
 
@@ -49,7 +49,7 @@ Item {
     command: ["bash", root.applyScript]
     onExited: function(exitCode) {
       if (exitCode !== 0)
-        console.warn("huacnlee.openrgb: apply exited with " + exitCode)
+        console.warn("huacnlee.theme-rgb: apply exited with " + exitCode)
       if (root.applyPending) {
         root.applyPending = false
         root.apply()
