@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "huacnlee.openrgb",
+  "name": "OpenRGB",
+  "version": "0.1.0",
+  "author": "huacnlee",
+  "license": "MIT",
+  "homepage": "https://github.com/huacnlee/omarchy-openrgb",
+  "description": "Keeps every device OpenRGB manages in the colour of the current Omarchy theme: keyboards, mice, RAM, fans and strips retint on theme switch and at login, using the theme's keyboard.rgb or accent.",
+  "kinds": [
+    "service"
+  ],
+  "entryPoints": {
+    "service": "Service.qml"
+  }
+}

@@ -5,7 +5,7 @@
 # Never fails the caller: anything missing is a silent no-op.
 
 THEME_DIR="$HOME/.local/state/omarchy/current/theme"
-OPENRGB_TIMEOUT=20
+OPENRGB_TIMEOUT=30
 
 # LEDs render the raw accent dim, so mix it toward white before applying and
 # run the devices at full brightness.
@@ -101,14 +101,18 @@ device_modes() {
   ' <<<"$devices"
 }
 
-applied=0
+# Without a running OpenRGB server every CLI invocation re-probes all the
+# hardware, which takes seconds per call. `-d` may repeat within one command,
+# so every device is applied in a single invocation after the one detection.
+args=()
 while IFS=$'\t' read -r id mode; do
-  openrgb_call -d "$id" -m "${mode:-static}" -c "$color" -b "$BRIGHTNESS"
-  applied=1
+  args+=(-d "$id" -m "${mode:-static}" -c "$color" -b "$BRIGHTNESS")
 done < <(device_modes)
 
-if (( ! applied )); then
-  openrgb_call -m static -c "$color" -b "$BRIGHTNESS"
+if (( ${#args[@]} == 0 )); then
+  args=(-m static -c "$color" -b "$BRIGHTNESS")
 fi
+
+openrgb_call "${args[@]}"
 
 exit 0

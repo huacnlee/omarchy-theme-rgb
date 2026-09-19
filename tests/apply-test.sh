@@ -53,12 +53,13 @@ PLAIN_DEVICES='0: Logitech G512 RGB
 # --- static accent reaches every detected device --------------------------
 printf '#7aa2f7\n' >"$theme/keyboard.rgb"
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
-if (( $(call_count) == 3 )) \
-  && called 'openrgb -d 0 -m static -c afc7fa -b 100' \
-  && called 'openrgb -d 1 -m static -c afc7fa -b 100'; then
-  pass "static accent reaches every detected device"
+# Without an OpenRGB server every CLI call re-probes the hardware (seconds
+# each), so all devices go out in one invocation after the one detection.
+if (( $(call_count) == 2 )) \
+  && called 'openrgb -d 0 -m static -c afc7fa -b 100 -d 1 -m static -c afc7fa -b 100'; then
+  pass "static accent reaches every detected device in one call"
 else
-  fail "static accent reaches every detected device" "$(cat "$calls")"
+  fail "static accent reaches every detected device in one call" "$(cat "$calls")"
 fi
 
 # --- gradient-capable devices prefer their gradient mode ------------------
@@ -66,8 +67,7 @@ OPENRGB_LIST_DEVICES='0: Fake Board
   Modes: Direct Static Gradient Wave
 1: Other Pad
   Modes: [Direct] Off Static '"'"'Rainbow Gradient'"'"'' run_apply
-if called 'openrgb -d 0 -m Gradient -c afc7fa -b 100' \
-  && called 'openrgb -d 1 -m Rainbow Gradient -c afc7fa -b 100'; then
+if called 'openrgb -d 0 -m Gradient -c afc7fa -b 100 -d 1 -m Rainbow Gradient -c afc7fa -b 100'; then
   pass "gradient-capable devices prefer their gradient mode"
 else
   fail "gradient-capable devices prefer their gradient mode" "$(cat "$calls")"
@@ -85,7 +85,7 @@ fi
 rm "$theme/keyboard.rgb"
 printf 'mode = "dark"\n\naccent = "#cba6f7"\nselection = "#313244"\n' >"$theme/colors.toml"
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
-if called 'openrgb -d 0 -m static -c e0cafa -b 100' && ! grep -q cba6f7 "$calls"; then
+if called 'openrgb -d 0 -m static -c e0cafa -b 100 -d 1 -m static -c e0cafa -b 100' && ! grep -q cba6f7 "$calls"; then
   pass "missing keyboard.rgb falls back to the colors.toml accent"
 else
   fail "missing keyboard.rgb falls back to the colors.toml accent" "$(cat "$calls")"
@@ -94,7 +94,7 @@ fi
 # --- keyboard.rgb wins over the accent when both exist --------------------
 printf '#7aa2f7\n' >"$theme/keyboard.rgb"
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
-if called 'openrgb -d 0 -m static -c afc7fa -b 100'; then
+if called 'openrgb -d 0 -m static -c afc7fa -b 100 -d 1 -m static -c afc7fa -b 100'; then
   pass "keyboard.rgb wins over the accent when both exist"
 else
   fail "keyboard.rgb wins over the accent when both exist" "$(cat "$calls")"
@@ -113,7 +113,7 @@ fi
 printf 'not-a-color\n' >"$theme/keyboard.rgb"
 printf 'accent = "#cba6f7"\n' >"$theme/colors.toml"
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
-if called 'openrgb -d 0 -m static -c e0cafa -b 100'; then
+if called 'openrgb -d 0 -m static -c e0cafa -b 100 -d 1 -m static -c e0cafa -b 100'; then
   pass "an invalid keyboard.rgb is skipped in favour of the accent"
 else
   fail "an invalid keyboard.rgb is skipped in favour of the accent" "$(cat "$calls")"
