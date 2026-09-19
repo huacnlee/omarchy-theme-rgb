@@ -60,7 +60,7 @@ OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
 # Without an OpenRGB server every CLI call re-probes the hardware (seconds
 # each), so all devices go out in one invocation after the one detection.
 if (( $(call_count) == 2 )) \
-  && called 'openrgb -d 0 -m static -c 7aa2f7 -b 100 -d 1 -m static -c 7aa2f7 -b 100'; then
+  && called 'openrgb -d 0 -m static -c 3665ff -b 100 -d 1 -m static -c 3665ff -b 100'; then
   pass "static accent reaches every detected device in one call"
 else
   fail "static accent reaches every detected device in one call" "$(cat "$calls")"
@@ -71,7 +71,7 @@ OPENRGB_LIST_DEVICES='0: Fake Board
   Modes: Direct Static Gradient Wave
 1: Other Pad
   Modes: [Direct] Off Static '"'"'Rainbow Gradient'"'"'' run_apply
-if called 'openrgb -d 0 -m Gradient -c 7aa2f7 -b 100 -d 1 -m Rainbow Gradient -c 7aa2f7 -b 100'; then
+if called 'openrgb -d 0 -m Gradient -c 3665ff -b 100 -d 1 -m Rainbow Gradient -c 3665ff -b 100'; then
   pass "gradient-capable devices prefer their gradient mode"
 else
   fail "gradient-capable devices prefer their gradient mode" "$(cat "$calls")"
@@ -79,7 +79,7 @@ fi
 
 # --- failed detection falls back to a static broadcast --------------------
 if OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" OPENRGB_LIST_FAIL=1 run_apply \
-  && called 'openrgb -m static -c 7aa2f7 -b 100'; then
+  && called 'openrgb -m static -c 3665ff -b 100'; then
   pass "failed detection falls back to a static broadcast"
 else
   fail "failed detection falls back to a static broadcast" "$(cat "$calls")"
@@ -89,7 +89,7 @@ fi
 rm "$theme/keyboard.rgb"
 printf 'mode = "dark"\n\naccent = "#cba6f7"\nselection = "#313244"\n' >"$theme/colors.toml"
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
-if called 'openrgb -d 0 -m static -c cba6f7 -b 100 -d 1 -m static -c cba6f7 -b 100'; then
+if called 'openrgb -d 0 -m static -c a66aff -b 100 -d 1 -m static -c a66aff -b 100'; then
   pass "missing keyboard.rgb falls back to the colors.toml accent"
 else
   fail "missing keyboard.rgb falls back to the colors.toml accent" "$(cat "$calls")"
@@ -98,7 +98,7 @@ fi
 # --- keyboard.rgb wins over the accent when both exist --------------------
 printf '#7aa2f7\n' >"$theme/keyboard.rgb"
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
-if called 'openrgb -d 0 -m static -c 7aa2f7 -b 100 -d 1 -m static -c 7aa2f7 -b 100'; then
+if called 'openrgb -d 0 -m static -c 3665ff -b 100 -d 1 -m static -c 3665ff -b 100'; then
   pass "keyboard.rgb wins over the accent when both exist"
 else
   fail "keyboard.rgb wins over the accent when both exist" "$(cat "$calls")"
@@ -117,7 +117,7 @@ fi
 printf 'not-a-color\n' >"$theme/keyboard.rgb"
 printf 'accent = "#cba6f7"\n' >"$theme/colors.toml"
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
-if called 'openrgb -d 0 -m static -c cba6f7 -b 100 -d 1 -m static -c cba6f7 -b 100'; then
+if called 'openrgb -d 0 -m static -c a66aff -b 100 -d 1 -m static -c a66aff -b 100'; then
   pass "an invalid keyboard.rgb is skipped in favour of the accent"
 else
   fail "an invalid keyboard.rgb is skipped in favour of the accent" "$(cat "$calls")"
@@ -146,7 +146,7 @@ fi
 
 # --- stops prints the single colour without touching openrgb --------------
 : >"$calls"
-if [[ $(stops) == 7aa2f7 && ! -s $calls ]]; then
+if [[ $(stops) == 3665ff && ! -s $calls ]]; then
   pass "stops prints the single colour without touching openrgb"
 else
   fail "stops prints the single colour without touching openrgb" "$(stops; cat "$calls")"
@@ -168,13 +168,13 @@ green = "#00ff00"
 cyan = "#00ffff"
 blue = "#0000ff"
 magenta = "#ff00ff"
-brown = "#8000ff"
+brown = "#3800ff"
 bright_red = "#ff0000"
 TOML
 
 # --- 3 colours: ordered by hue so the gradient flows through the accent ---
 set_config '{"mode": "palette", "colors": 3}'
-if [[ $(stops | paste -sd,) == 00ffff,0000ff,8000ff ]]; then
+if [[ $(stops | paste -sd,) == 00ffff,0000ff,3800ff ]]; then
   pass "3 colours: ordered by hue so the gradient flows through the accent"
 else
   fail "3 colours: ordered by hue so the gradient flows through the accent" "$(stops | paste -sd,)"
@@ -182,7 +182,7 @@ fi
 
 # --- 5 colours: only hues within 90 degrees join, so four here -------------
 set_config '{"mode": "palette", "colors": 5}'
-if [[ $(stops | paste -sd,) == 00ffff,0000ff,8000ff,ff00ff ]]; then
+if [[ $(stops | paste -sd,) == 00ffff,0000ff,3800ff,ff00ff ]]; then
   pass "5 colours: only hues within 90 degrees join, so four here"
 else
   fail "5 colours: only hues within 90 degrees join, so four here" "$(stops | paste -sd,)"
@@ -190,7 +190,7 @@ fi
 
 # --- missing config defaults to 5 palette colours -------------------------
 rm "$home/.config/omarchy/theme-rgb.json"
-if [[ $(stops | paste -sd,) == 00ffff,0000ff,8000ff,ff00ff ]]; then
+if [[ $(stops | paste -sd,) == 00ffff,0000ff,3800ff,ff00ff ]]; then
   pass "missing config defaults to 5 palette colours"
 else
   fail "missing config defaults to 5 palette colours" "$(stops | paste -sd,)"
@@ -204,7 +204,7 @@ OPENRGB_LIST_DEVICES='0: Fake Strip
 1: Fake Logo
   Modes: [Direct] Static
   LEDs: Logo' run_apply
-if (( $(call_count) == 2 )) && called 'openrgb -d 0 -m direct -c 0000ff,0000ff,8000ff -d 1 -m direct -c 0000ff'; then
+if (( $(call_count) == 2 )) && called 'openrgb -d 0 -m direct -c 0000ff,0000ff,3800ff -d 1 -m direct -c 0000ff'; then
   pass "palette colours fill each device's LEDs in clean bands"
 else
   fail "palette colours fill each device's LEDs in clean bands" "$(cat "$calls")"
@@ -212,7 +212,7 @@ fi
 
 # --- failed detection broadcasts the palette stops -------------------------
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" OPENRGB_LIST_FAIL=1 run_apply
-if called 'openrgb -c 0000ff,8000ff'; then
+if called 'openrgb -c 0000ff,3800ff'; then
   pass "failed detection broadcasts the palette stops"
 else
   fail "failed detection broadcasts the palette stops" "$(cat "$calls")"
@@ -228,7 +228,7 @@ fi
 
 # --- a grey accent has no hue to follow, so single wins -------------------
 printf 'accent = "#cacccc"\nred = "#ff0000"\nblue = "#0000ff"\n' >"$theme/colors.toml"
-if [[ $(stops | paste -sd,) == cacccc ]]; then
+if [[ $(stops | paste -sd,) == faffff ]]; then
   pass "a grey accent has no hue to follow, so single wins"
 else
   fail "a grey accent has no hue to follow, so single wins" "$(stops | paste -sd,)"
@@ -237,10 +237,23 @@ fi
 # --- close hues are distinct colours, only identical hex is a duplicate ---
 printf 'accent = "#0000ff"\nblue = "#0000ff"\nbrown = "#1010ff"\ncyan = "#00ffff"\n' >"$theme/colors.toml"
 set_config '{"mode": "palette", "colors": 3}'
-if [[ $(stops | paste -sd,) == 00ffff,0000ff,1010ff ]]; then
+if [[ $(stops | paste -sd,) == 00ffff,0000ff,0101ff ]]; then
   pass "close hues are distinct colours, only identical hex is a duplicate"
 else
   fail "close hues are distinct colours, only identical hex is a duplicate" "$(stops | paste -sd,)"
+fi
+
+# --- LED gamma: minor channels follow sRGB to linear, the brightest stays --
+# On an LED every channel is linear light, so a screen value of 0x80 shows
+# about twice as bright as it does on the display and mixed colours wash
+# out. Keeping the brightest channel and taking the others through
+# (c/max)^2.2 restores the look of the colour without dimming it.
+printf 'accent = "#d84a33"\n' >"$theme/colors.toml"
+set_config '{"mode": "single", "single": "accent"}'
+if [[ $(stops) == ff180b ]]; then
+  pass "LED gamma: minor channels follow sRGB to linear, the brightest stays"
+else
+  fail "LED gamma: minor channels follow sRGB to linear, the brightest stays" "$(stops)"
 fi
 
 # ==========================================================================
@@ -255,7 +268,7 @@ green = "#00ff00"
 cyan = "#00ffff"
 blue = "#0000ff"
 magenta = "#ff00ff"
-brown = "#8000ff"
+brown = "#3800ff"
 foreground = "#cdd6f4"
 background = "#11111b"
 TOML
@@ -263,6 +276,7 @@ rm -f "$theme/keyboard.rgb"
 
 # --- variables lists every theme colour the panel may pick ----------------
 expected='accent 0000ff
+background 11111b
 red ff0000
 orange ff8000
 yellow ffff00
@@ -270,7 +284,7 @@ green 00ff00
 cyan 00ffff
 blue 0000ff
 magenta ff00ff
-brown 8000ff
+brown 3800ff
 foreground cdd6f4'
 if [[ $(HOME="$home" "$APPLY" variables) == "$expected" ]]; then
   pass "variables lists every theme colour the panel may pick"
@@ -297,7 +311,7 @@ rm "$theme/keyboard.rgb"
 
 # --- palette tiers revolve around the chosen anchor -----------------------
 set_config '{"mode": "palette", "colors": 3, "anchor": "red"}'
-if [[ $(stops | paste -sd,) == ff0000,ff8000,ffff00 ]]; then
+if [[ $(stops | paste -sd,) == ff0000,ff3800,ffff00 ]]; then
   pass "palette tiers revolve around the chosen anchor"
 else
   fail "palette tiers revolve around the chosen anchor" "$(stops | paste -sd,)"
@@ -305,7 +319,7 @@ fi
 
 # --- custom mode lights the listed variables in their order ---------------
 set_config '{"mode": "custom", "custom": ["cyan", "magenta", "foreground"]}'
-if [[ $(stops | paste -sd,) == 00ffff,ff00ff,cdd6f4 ]]; then
+if [[ $(stops | paste -sd,) == 00ffff,ff00ff,aebfff ]]; then
   pass "custom mode lights the listed variables in their order"
 else
   fail "custom mode lights the listed variables in their order" "$(stops | paste -sd,)"
