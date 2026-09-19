@@ -284,7 +284,7 @@ green 00ff00
 cyan 00ffff
 blue 0000ff
 magenta ff00ff
-brown 3800ff
+brown 8000ff
 foreground cdd6f4'
 if [[ $(HOME="$home" "$APPLY" variables) == "$expected" ]]; then
   pass "variables lists every theme colour the panel may pick"
