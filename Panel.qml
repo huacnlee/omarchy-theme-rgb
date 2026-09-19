@@ -36,9 +36,9 @@ Panel {
 
   readonly property var modes: [
     { value: "single", label: "1", tooltip: "One theme colour on every device — the accent unless you pick another" },
-    { value: "3", label: "3", tooltip: "Three colours: accent, background, foreground" },
-    { value: "5", label: "5", tooltip: "Five of the theme's colours, chosen by what each device is for (the default)" },
-    { value: "8", label: "8", tooltip: "Eight: the theme's named colours in order, by what each device is for" }
+    { value: "3", label: "3", tooltip: "The accent and the two theme colours that contrast most" },
+    { value: "5", label: "5", tooltip: "Five of the theme's colours, ordered for contrast (the default)" },
+    { value: "8", label: "8", tooltip: "Eight of the theme's colours, ordered for contrast" }
   ]
 
   readonly property string mode: service ? String(service.mode) : "palette"

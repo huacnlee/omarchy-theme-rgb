@@ -182,3 +182,58 @@ No LED gamma or normalisation: the LEDs receive the variable's hex exactly as
 colors.toml defines it, scaled only by the brightness setting, so a theme
 controls the colours precisely. The mode chips read 1 / 3 / Default / 8 /
 Custom.
+
+## Revision 7 — theme-aware tiers, chef's choice
+
+Which colours light is worked out per theme from the colours themselves; the
+fixed role lists of revision 5 are gone, and so is any colour picking.
+
+### Colour selection (`theme_order` in the script)
+
+- Candidates: the accent plus `red orange yellow green cyan blue magenta
+  brown` from `colors.toml`. Background and foreground never join in.
+- Greys (saturation < 15 %) and dark tones (value < 30 %) are dropped.
+- Near-duplicates — hue within 12°, saturation and value both within 25
+  points — collapse to one: the accent wins, else the more vivid (saturation ×
+  value), else the earlier name.
+- The accent comes first; each next colour is the remaining one whose hue is
+  farthest from the previous (ties: more vivid, then earlier), so neighbouring
+  bands contrast.
+- Tiers 3 / 5 / 8 take the first N of that order. The desk class (Keyboard,
+  Mouse, Mousemat, Headset, HeadsetStand, Gamepad) takes it as is; every
+  other device ("ambient": screen, strips, DRAM, motherboard, case…) starts
+  one colour later, the first colour moving to the end. A theme short of
+  colours lights fewer; a grey theme yields nothing and both classes fall
+  back to the single colour (the accent, or `single`).
+- `1` is the accent on every device (or `single` when set). `custom` lists
+  the named variables in order, the same for both classes.
+- No gamma or normalisation (as revision 6): the theme's exact hex values,
+  scaled only by `brightness`.
+
+### Configuration
+
+`~/.config/omarchy/theme-rgb.json` — the panel writes `mode` (`single` |
+`palette`), `colors` (3 | 5 | 8), `brightness` (10–100) and `layout` (`flow`
+| `rows` | `columns` | `zones`). The script additionally honours `single` and
+`mode: custom` with `custom: [...]`, which the panel does not expose. The
+`roles` key is gone and ignored.
+
+### Panel
+
+The standalone-window experiment was reverted: the panel stays a bar popout
+anchored to the palette glyph. It offers the colour chips `1` / `3` / `5` /
+`8` — `5` is the default and simply reads "5" — a LAYOUT row (Flow / Rows /
+Columns / Zones) with a one-line hint beneath it, a BRIGHTNESS slider, the
+Desk and Around preview strips (one unlabelled strip in single mode), the
+DEVICES list, and a header menu with Sync now and GitHub. There is no colour
+picking: no swatches, no Custom chip, no hint under the colour chips. Without
+OpenRGB the popout shows a welcome page with an Install OpenRGB button.
+Keys: ←/→ within a row, ↑/↓ between rows, Enter picks, `1`–`4` pick a colours
+chip, `r` syncs, `m` opens the menu, Esc closes.
+
+### Service
+
+Unchanged in shape: a headless `openrgb --server --noautoconnect` kept alive
+for the life of the shell, the first sync held until port 6742 answers (up to
+20 s), serialised saves, one retry on a failed apply, and openrgb's output in
+`~/.local/state/omarchy/theme-rgb/last-apply.log`.

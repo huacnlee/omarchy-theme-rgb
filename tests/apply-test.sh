@@ -51,8 +51,7 @@ set_config() { mkdir -p "$home/.config/omarchy"; printf '%s\n' "$1" >"$home/.con
 stops() { HOME="$home" PATH="$mock_bin:$PATH" "$APPLY" stops | awk -v c="${1:-desk}" '$1 == c { print $2 }'; }
 variables() { HOME="$home" "$APPLY" variables; }
 
-# Pure colours survive the LED gamma unchanged, which keeps expectations
-# readable; the gamma has its own case below.
+# Pure colours keep expectations readable.
 cat >"$theme/colors.toml" <<'TOML'
 accent = "#0000ff"
 background = "#001000"
@@ -262,7 +261,7 @@ else
 fi
 
 # ==========================================================================
-# custom lists, brightness, gamma
+# custom lists, brightness, exact values
 # ==========================================================================
 cat >"$theme/colors.toml" <<'TOML'
 accent = "#0000ff"

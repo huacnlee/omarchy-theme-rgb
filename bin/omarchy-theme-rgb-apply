@@ -5,8 +5,9 @@
 # theme-set hook. Never fails the caller: anything missing is a silent no-op.
 #
 #   omarchy-theme-rgb-apply             apply to hardware
-#   omarchy-theme-rgb-apply stops       print the colours that would be lit,
-#                                       one hex per line (no OpenRGB involved)
+#   omarchy-theme-rgb-apply stops       print the colours that would be lit:
+#                                       "desk a,b,c" and "ambient a,b,c"
+#                                       (no OpenRGB involved)
 #   omarchy-theme-rgb-apply variables   print "name hex" for every theme
 #                                       variable the user may pick
 
