@@ -460,9 +460,12 @@ led_colors() {
     IFS=, ; echo "${STOPS[*]}"; return
   fi
 
-  awk -v count="$count" -v stops="$(IFS=,; echo "${STOPS[*]}")" -v layout="$LAYOUT" \
-      -v keymap="$KEY_MAP" -v zone_names="$KEY_ZONES" -v names="$names" '
+  # The key map and LED names carry backslashes (the "\ (ANSI)" key), which
+  # awk -v would treat as escapes; ENVIRON hands them over untouched.
+  KEY_MAP="$KEY_MAP" LED_NAMES="$names" \
+  awk -v count="$count" -v stops="$(IFS=,; echo "${STOPS[*]}")" -v layout="$LAYOUT" -v zone_names="$KEY_ZONES" '
     BEGIN {
+      keymap = ENVIRON["KEY_MAP"]; names = ENVIRON["LED_NAMES"]
       k = split(stops, stop, ",")
       split(names, led, "\t")
       nz = split(zone_names, zone_list, " ")
