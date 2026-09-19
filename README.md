@@ -41,9 +41,15 @@ Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
 - **Preview** — the exact colours the LEDs get, as bands.
 - **Devices** — what OpenRGB found on the last sync, with LED counts.
 
+**Menu** — the `󰇘` button in the header lists *Sync now*, *Install OpenRGB*
+(only while it is missing; opens a floating terminal running
+`omarchy-pkg-add openrgb`, and the panel picks the install up on its own) and
+*GitHub*.
+
 Several colours are laid out as contiguous bands across a device's LEDs, with
 hard edges between them. Keyboard: `←`/`→` move within a row, `↑`/`↓` between
-rows, `Enter` picks, `1`–`4` pick a colours mode, `r` syncs now, `Esc` closes.
+rows, `Enter` picks, `1`–`4` pick a colours mode, `r` syncs now, `m` opens the
+menu, `Esc` closes.
 
 Settings live in `~/.config/omarchy/theme-rgb.json`; the file is watched, so
 editing it by hand applies too:

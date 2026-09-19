@@ -145,6 +145,40 @@ Item {
     apply()
   }
 
+  // Re-runs the presence probe; the probe itself starts the server and the
+  // first sync when openrgb has appeared since it last looked.
+  function recheckOpenrgb() {
+    if (openrgbProbe.running) return
+    openrgbProbe.running = true
+  }
+
+  // Installs the package where the user can watch it: a floating terminal
+  // running omarchy-pkg-add, the same helper Omarchy's own update flow uses,
+  // so the password prompt and the package output land in front of them
+  // rather than in the shell's log. The launcher detaches the terminal, so nothing
+  // here can wait for it to close; the watch below re-probes every few
+  // seconds until openrgb turns up, and gives up after ten minutes.
+  function installOpenrgb() {
+    if (openrgbPresent) return
+    Quickshell.execDetached(["bash", "-lc",
+      "exec omarchy-launch-floating-terminal-with-presentation omarchy-pkg-add openrgb"])
+    installWatchPolls = 0
+    installWatch.restart()
+  }
+
+  property int installWatchPolls: 0
+
+  Timer {
+    id: installWatch
+    interval: 3000
+    repeat: true
+    onTriggered: {
+      root.installWatchPolls++
+      if (root.openrgbPresent || root.installWatchPolls > 200) { installWatch.stop(); return }
+      root.recheckOpenrgb()
+    }
+  }
+
   FileView {
     id: configFile
     path: root.configPath
@@ -191,12 +225,22 @@ Item {
     id: openrgbProbe
     command: ["bash", "-c", "command -v openrgb"]
     onExited: function(exitCode) {
-      root.openrgbPresent = exitCode === 0
-      if (root.openrgbPresent) {
-        root.startServer()
-        readinessTimer.start()
-      } else {
+      var present = exitCode === 0
+      var appeared = present && !root.openrgbPresent
+      root.openrgbPresent = present
+      if (!present) {
         root.markServerReady()
+        return
+      }
+      root.startServer()
+      root.readinessPolls = 0
+      readinessTimer.start()
+      // Freshly installed: hold the first sync until the server answers,
+      // exactly as at shell start, rather than probing hardware it is still
+      // enumerating.
+      if (appeared) {
+        root.serverReady = false
+        root.apply()
       }
     }
   }

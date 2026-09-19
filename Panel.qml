@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "components"
 
 // Bar button plus the settings popout for Theme RGB. All state lives in
 // Service.qml (looked up through the shell); this file only shows it and
@@ -25,6 +26,12 @@ Panel {
   property string cursorRow: "mode"
   property int cursorIndex: 0
   property bool cursorActive: false
+
+  // The header's "more" menu, once its trailing control has loaded. While it
+  // is open the list owns the keys.
+  property var headerMenu: null
+  readonly property bool menuOpen: headerMenu ? headerMenu.opened : false
+  readonly property string githubUrl: "https://github.com/huacnlee/omarchy-theme-rgb"
 
   readonly property var modes: [
     { value: "single", label: "Single", tooltip: "One theme colour on every device" },
@@ -90,6 +97,26 @@ Panel {
 
   function syncNow() {
     if (service && !syncing) service.apply()
+  }
+
+  // The actions that do not earn a control of their own. Installing only
+  // appears while there is something to install.
+  readonly property var menuEntries: {
+    var list = [{ id: "sync", label: "Sync now", enabled: openrgbPresent && !syncing }]
+    if (!openrgbPresent) list.push({ id: "install", label: "Install OpenRGB", enabled: !!service })
+    list.push({ separator: true })
+    list.push({ id: "github", label: "GitHub", enabled: !!bar })
+    return list
+  }
+
+  function runMenuAction(id) {
+    if (id === "sync") syncNow()
+    else if (id === "install" && service && !openrgbPresent) { service.installOpenrgb(); close() }
+    else if (id === "github" && bar) { bar.run("xdg-open " + bar.shellQuote(githubUrl)); close() }
+  }
+
+  function openMenu() {
+    if (headerMenu && !menuOpen) headerMenu.open()
   }
 
   function modeIndex() {
@@ -187,6 +214,9 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
+      // The open menu takes every key, Esc included, so Esc closes the menu
+      // before it closes the panel and j/k walk the list, not the swatches.
+      blocked: themeRgb.menuOpen
 
       onMoveRequested: function(dx, dy) {
         if (!themeRgb.cursorActive) { themeRgb.cursorActive = true; return }
@@ -199,6 +229,7 @@ Panel {
         var key = String(text || "").toLowerCase()
         if (key >= "1" && key <= "4") themeRgb.chooseMode(themeRgb.modes[Number(key) - 1].value)
         else if (key === "r") themeRgb.syncNow()
+        else if (key === "m") themeRgb.openMenu()
       }
 
       // Scrolls when a long device list outgrows the screen.
@@ -234,13 +265,31 @@ Panel {
             }
           }
           trailingControl: Component {
-            PanelActionButton {
-              iconText: "󰑐"
-              tooltipText: themeRgb.syncing ? "Syncing…" : "Sync now (r)"
-              foreground: themeRgb.foreground
-              fontFamily: themeRgb.fontFamily
-              enabled: themeRgb.openrgbPresent && !themeRgb.syncing
-              onClicked: themeRgb.syncNow()
+            Row {
+              spacing: Style.space(2)
+
+              PanelActionButton {
+                iconText: "󰑐"
+                tooltipText: themeRgb.syncing ? "Syncing…" : "Sync now (r)"
+                foreground: themeRgb.foreground
+                fontFamily: themeRgb.fontFamily
+                enabled: themeRgb.openrgbPresent && !themeRgb.syncing
+                onClicked: themeRgb.syncNow()
+              }
+
+              PanelMenu {
+                id: moreMenu
+                tooltipText: "More (m)"
+                foreground: themeRgb.foreground
+                fontFamily: themeRgb.fontFamily
+                entries: themeRgb.menuEntries
+                panelOpen: themeRgb.opened
+                onActivated: function(id) { themeRgb.runMenuAction(id) }
+                // Closing the list hands the keys back to the panel.
+                onOpenedChanged: if (!opened && themeRgb.opened) Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+                Component.onCompleted: themeRgb.headerMenu = moreMenu
+                Component.onDestruction: if (themeRgb.headerMenu === moreMenu) themeRgb.headerMenu = null
+              }
             }
           }
         }

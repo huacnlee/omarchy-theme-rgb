@@ -46,6 +46,18 @@ done
 grep -q '"DEVICES"' Panel.qml || fail "Panel.qml must list the devices"
 ! grep -q 'omarchy-theme-rgb-apply' Panel.qml || fail "Panel.qml must not run the script itself"
 
+# The header menu: sync, an install that goes through Omarchy's own package
+# helper in a terminal the user can see (then re-probed by the service), and
+# the project link.
+[[ -f components/PanelMenu.qml ]] || fail "components/PanelMenu.qml is missing"
+grep -q 'PanelMenu {' Panel.qml || fail "Panel.qml must show the header menu"
+grep -q 'https://github.com/huacnlee/omarchy-theme-rgb' Panel.qml || fail "Panel.qml must link to the GitHub repository"
+grep -q 'service.installOpenrgb()' Panel.qml || fail "Panel.qml must ask the service to install OpenRGB"
+grep -q 'function installOpenrgb' Service.qml || fail "Service.qml must expose installOpenrgb"
+grep -q 'function recheckOpenrgb' Service.qml || fail "Service.qml must expose recheckOpenrgb"
+grep -q 'omarchy-launch-floating-terminal-with-presentation omarchy-pkg-add openrgb' Service.qml \
+  || fail "Service.qml must install openrgb through omarchy-pkg-add in a floating terminal"
+
 # Never escalate or touch the package manager from inside the shell.
 ! grep -Eq '\b(sudo|pkexec|pacman|yay)\b' Service.qml Panel.qml bin/omarchy-theme-rgb-apply \
   || fail "plugin code must not escalate privileges or manage packages"
