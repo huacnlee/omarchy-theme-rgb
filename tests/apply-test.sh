@@ -168,7 +168,7 @@ green = "#00ff00"
 cyan = "#00ffff"
 blue = "#0000ff"
 magenta = "#ff00ff"
-brown = "#3800ff"
+brown = "#8000ff"
 bright_red = "#ff0000"
 TOML
 
@@ -268,7 +268,7 @@ green = "#00ff00"
 cyan = "#00ffff"
 blue = "#0000ff"
 magenta = "#ff00ff"
-brown = "#3800ff"
+brown = "#8000ff"
 foreground = "#cdd6f4"
 background = "#11111b"
 TOML
