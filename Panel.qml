@@ -481,9 +481,14 @@ Panel {
                 anchors.margins: 1
                 Repeater {
                   model: preview.modelData.colors
+                  // Equal bands, rounded down; the last one takes what is
+                  // left so the strip reaches its right edge.
                   delegate: Rectangle {
+                    required property int index
                     required property var modelData
-                    width: Math.floor(previewRow.width / Math.max(1, preview.modelData.colors.length))
+                    readonly property int count: Math.max(1, preview.modelData.colors.length)
+                    readonly property int band: Math.floor(previewRow.width / count)
+                    width: index === count - 1 ? previewRow.width - band * (count - 1) : band
                     height: previewRow.height
                     color: modelData
                   }
