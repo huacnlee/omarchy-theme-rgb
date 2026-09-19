@@ -42,16 +42,17 @@ Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
   - *Custom* lights exactly the variables you pick, in the order you pick them.
 - **Theme colour** — swatches of the current theme's `accent background red
   orange yellow green cyan blue magenta brown foreground`, as `colors.toml`
-  defines them. Dark tones such as a navy background are lit at full
-  strength, so they read as that hue rather than a dim glow.
+  defines them. The LEDs get exactly those values, so a theme controls the
+  colours precisely: a dark background is a dark glow.
 - **Layout** — where several colours go. *Flow* lays bands along each
   device's LEDs (top to bottom on most keyboards). On keyboards, *Rows* and
   *Columns* place the bands by where each key actually sits, and *Zones*
   colours the function keys, main block, modifiers, navigation cluster,
   numpad and logo in turn; on other devices *Zones* colours each OpenRGB zone
   (a mouse's logo, wheel and strip, say) in turn.
-- **Brightness** — 10–100 %. Applied to the colour values themselves, so it
-  works the same in every OpenRGB mode.
+- **Brightness** — 10–100 %. Scales the colour values themselves, so it
+  works the same in every OpenRGB mode; it is the only change made to what
+  the theme says.
 - **Preview** — the exact colours the LEDs get, as bands; one strip per device class when they differ.
 - **Devices** — what OpenRGB found on the last sync, with LED counts.
 

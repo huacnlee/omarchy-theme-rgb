@@ -175,3 +175,10 @@ each device is for, not by computing hues.
 - Several colours are always written in Direct mode (static keeps one colour
   and drops the rest); openrgb's output goes to last-apply.log, a non-zero
   exit is reported and retried once.
+
+## Revision 6 — exact theme values
+
+No LED gamma or normalisation: the LEDs receive the variable's hex exactly as
+colors.toml defines it, scaled only by the brightness setting, so a theme
+controls the colours precisely. The mode chips read 1 / 3 / Default / 8 /
+Custom.

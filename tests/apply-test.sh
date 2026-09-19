@@ -159,7 +159,7 @@ fi
 
 # --- 3 colours are accent, background, foreground everywhere --------------
 set_config '{"mode": "palette", "colors": 3}'
-if [[ $(stops) == 0000ff,00ff00,ffffff && $(stops ambient) == 0000ff,00ff00,ffffff ]]; then
+if [[ $(stops) == 0000ff,001000,ffffff && $(stops ambient) == 0000ff,001000,ffffff ]]; then
   pass "3 colours are accent, background, foreground everywhere"
 else
   fail "3 colours are accent, background, foreground everywhere" "$(stops) / $(stops ambient)"
@@ -167,7 +167,7 @@ fi
 
 # --- 5 colours add blue and yellow on the desk, blue and magenta around it -
 set_config '{"mode": "palette", "colors": 5}'
-if [[ $(stops) == 0000ff,00ff00,ffffff,0038ff,ffff00 && $(stops ambient) == 0000ff,00ff00,ffffff,0038ff,ff00ff ]]; then
+if [[ $(stops) == 0000ff,001000,ffffff,0080ff,ffff00 && $(stops ambient) == 0000ff,001000,ffffff,0080ff,ff00ff ]]; then
   pass "5 colours add blue and yellow on the desk, blue and magenta around it"
 else
   fail "5 colours add blue and yellow on the desk, blue and magenta around it" "$(stops) / $(stops ambient)"
@@ -175,7 +175,7 @@ fi
 
 # --- 8 colours carry on with red, green, magenta on the desk; cyan, red, green around it
 set_config '{"mode": "palette", "colors": 8}'
-if [[ $(stops) == 0000ff,00ff00,ffffff,0038ff,ffff00,ff0000,00ff00,ff00ff && $(stops ambient) == 0000ff,00ff00,ffffff,0038ff,ff00ff,00ffff,ff0000,00ff00 ]]; then
+if [[ $(stops) == 0000ff,001000,ffffff,0080ff,ffff00,ff0000,00ff00,ff00ff && $(stops ambient) == 0000ff,001000,ffffff,0080ff,ff00ff,00ffff,ff0000,00ff00 ]]; then
   pass "8 colours carry on with red, green, magenta on the desk; cyan, red, green around it"
 else
   fail "8 colours carry on with red, green, magenta on the desk; cyan, red, green around it" "$(stops) / $(stops ambient)"
@@ -183,7 +183,7 @@ fi
 
 # --- missing config means 5 colours ---------------------------------------
 rm "$home/.config/omarchy/theme-rgb.json"
-if [[ $(stops) == 0000ff,00ff00,ffffff,0038ff,ffff00 ]]; then
+if [[ $(stops) == 0000ff,001000,ffffff,0080ff,ffff00 ]]; then
   pass "missing config means 5 colours"
 else
   fail "missing config means 5 colours" "$(stops)"
@@ -193,7 +193,7 @@ fi
 # No foreground here, and blue is the accent's hex again: yellow moves up.
 printf 'accent = "#0000ff"\nbackground = "#001000"\nyellow = "#ffff00"\nblue = "#0000ff"\nred = "#ff0000"\n' >"$theme/colors.toml"
 set_config '{"mode": "palette", "colors": 3}'
-if [[ $(stops) == 0000ff,00ff00,ffff00 ]]; then
+if [[ $(stops) == 0000ff,001000,ffff00 ]]; then
   pass "a missing variable and a repeated hex are skipped, the next moves up"
 else
   fail "a missing variable and a repeated hex are skipped, the next moves up" "$(stops)"
@@ -234,7 +234,7 @@ OPENRGB_LIST_DEVICES='0: ENE DRAM
   Type:           Keyboard
   Modes: [Direct] Static
   LEDs: a b c d e ' run_apply
-if called 'openrgb -d 0 -m direct -c 0000ff,00ff00,ffffff,00ff00,ff00ff -d 1 -m direct -c 0000ff,00ff00,ffffff,00ff00,ffff00'; then
+if called 'openrgb -d 0 -m direct -c 0000ff,001000,ffffff,00ff00,ff00ff -d 1 -m direct -c 0000ff,001000,ffffff,00ff00,ffff00'; then
   pass "each device gets its own class's colours in the one call"
 else
   fail "each device gets its own class's colours in the one call" "$(cat "$calls")"
@@ -242,7 +242,7 @@ fi
 
 # --- failed detection broadcasts the desk colours -------------------------
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" OPENRGB_LIST_FAIL=1 run_apply
-if called 'openrgb -c 0000ff,00ff00,ffffff,00ff00,ffff00'; then
+if called 'openrgb -c 0000ff,001000,ffffff,00ff00,ffff00'; then
   pass "failed detection broadcasts the desk colours"
 else
   fail "failed detection broadcasts the desk colours" "$(cat "$calls")"
@@ -327,18 +327,15 @@ else
   fail "single mode at low brightness still goes through static" "$(cat "$calls")"
 fi
 
-# --- LED gamma: minor channels follow sRGB to linear, the brightest fills --
-# On an LED every channel is linear light, so a screen value of 0x80 shows
-# about twice as bright as on the display and mixed colours wash out.
-# Taking each channel through (c/max)^2.2 and lighting the brightest fully
-# restores the look of the colour at full strength: d84a33 -> ff180b, and a
-# navy background 11111b becomes that blue, 5c5cff.
+# --- colours are sent exactly as the theme defines them --------------------
+# No gamma, no normalising: what colors.toml says is what the LED gets, so
+# a dark background is a dark glow, not a computed bright hue.
 printf 'accent = "#d84a33"\nbackground = "#11111b"\n' >"$theme/colors.toml"
 set_config '{"mode": "palette", "colors": 3}'
-if [[ $(stops) == ff180b,5c5cff ]]; then
-  pass "LED gamma: minor channels follow sRGB to linear, the brightest fills"
+if [[ $(stops) == d84a33,11111b ]]; then
+  pass "colours are sent exactly as the theme defines them"
 else
-  fail "LED gamma: minor channels follow sRGB to linear, the brightest fills" "$(stops)"
+  fail "colours are sent exactly as the theme defines them" "$(stops)"
 fi
 
 # --- bands: LEDs split evenly, remainder goes to the last colours ---------

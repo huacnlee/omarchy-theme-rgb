@@ -234,36 +234,27 @@ single_color() {
   variable_color "${SINGLE:-accent}"
 }
 
-# A screen value is sRGB-encoded; an LED channel is linear light, so a mixed
-# colour sent as-is has its minor channels far too bright and washes out
-# toward white. Take every channel relative to the brightest through
-# (c/max)^gamma, which keeps hue and restores the saturation seen on screen,
-# and light the brightest channel fully: the theme's dark tones (a navy
-# background) become that hue at full strength instead of a dim glow. The
-# brightness setting then scales the whole colour.
-LED_GAMMA=2.2
-
+# The colour goes out exactly as colors.toml defines it — what was picked is
+# what lights — scaled only by the brightness setting.
 scale_color() {
-  awk -v hex="$1" -v percent="$BRIGHTNESS" -v gamma="$LED_GAMMA" '
+  awk -v hex="$1" -v percent="$BRIGHTNESS" '
     function hex_value(char) {
       return index("0123456789abcdef", tolower(char)) - 1
     }
     function channel(hex, idx) {
       return hex_value(substr(hex, idx, 1)) * 16 + hex_value(substr(hex, idx + 1, 1))
     }
-    function led(c) {
-      return int(255 * (max > 0 ? (c / max) ^ gamma : 1) * percent / 100 + 0.5)
-    }
     BEGIN {
-      r = channel(hex, 1); g = channel(hex, 3); b = channel(hex, 5)
-      max = r; if (g > max) max = g; if (b > max) max = b
-      printf "%02x%02x%02x\n", led(r), led(g), led(b)
+      printf "%02x%02x%02x\n",
+        int(channel(hex, 1) * percent / 100 + 0.5),
+        int(channel(hex, 3) * percent / 100 + 0.5),
+        int(channel(hex, 5) * percent / 100 + 0.5)
     }
   '
 }
 
 # The colours a class of device lights, one per line, already through the
-# LED gamma and the brightness. `class` is desk or ambient; single and
+# brightness. `class` is desk or ambient; single and
 # custom modes are the same for both.
 class_stops() {
   local class="$1" color colors=()
