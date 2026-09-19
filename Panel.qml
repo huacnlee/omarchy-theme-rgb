@@ -35,9 +35,9 @@ Panel {
   readonly property string githubUrl: "https://github.com/huacnlee/omarchy-theme-rgb"
 
   readonly property var modes: [
-    { value: "single", label: "Single", tooltip: "One theme colour on every device — the accent unless you pick another" },
+    { value: "single", label: "1", tooltip: "One theme colour on every device — the accent unless you pick another" },
     { value: "3", label: "3", tooltip: "Three colours: accent, background, foreground" },
-    { value: "5", label: "5", tooltip: "Five: those three plus two more, chosen by what each device is for" },
+    { value: "5", label: "Default", tooltip: "Five colours: those three plus two more, chosen by what each device is for" },
     { value: "8", label: "8", tooltip: "Eight: the theme's roles in order, by what each device is for" },
     { value: "custom", label: "Custom", tooltip: "Exactly the theme colours you pick, in that order" }
   ]

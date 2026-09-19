@@ -29,11 +29,11 @@ Remove it with `omarchy plugin remove huacnlee.theme_rgb`.
 
 Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
 
-- **Colours** — `Single`, `3`, `5`, `8` or `Custom`.
-  - *Single* lights one theme variable on every device: the accent unless
-    you pick another.
+- **Colours** — `1`, `3`, `Default` (five), `8` or `Custom`.
+  - *1* lights one theme variable on every device: the accent unless you
+    pick another.
   - *3* lights accent, background and foreground everywhere.
-  - *5* and *8* carry on with the theme's other roles in an order that
+  - *Default* (five) and *8* carry on with the theme's other roles in an order that
     suits what each device is for: on the desk (keyboard, mouse, headset,
     pad) `blue, yellow, red, green, magenta…`; around it (screen, strips,
     RAM, motherboard, case) `blue, magenta, cyan, red, green…`. Click a
