@@ -40,7 +40,7 @@ done
 grep -q '"openrgb", "--server", "--noautoconnect"' Service.qml || fail "Service.qml must keep a headless OpenRGB server"
 grep -q 'moduleName: "huacnlee.theme_rgb"' Panel.qml || fail "Panel.qml must declare moduleName huacnlee.theme_rgb"
 grep -q 'serviceFor(moduleName)' Panel.qml || fail "Panel.qml must look up its own service"
-for fn in setMode setSingle setAnchor setColors toggleCustom setBrightness; do
+for fn in setMode setSingle setAnchor setPalette toggleCustom setBrightness setLayout; do
   grep -q "service.$fn" Panel.qml || fail "Panel.qml must forward $fn to the service"
 done
 grep -q '"DEVICES"' Panel.qml || fail "Panel.qml must list the devices"
