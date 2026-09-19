@@ -81,6 +81,9 @@ Item {
   // One save for "palette with n colours", so the file never holds a half
   // state between two writes.
   function setPalette(n) { if (n === 3 || n === 5 || n === 8) { colors = n; mode = "palette"; save() } }
+  function setLayout(value) {
+    if (value === "flow" || value === "rows" || value === "columns" || value === "zones") { layout = value; save() }
+  }
   function toggleCustom(name) {
     var next = custom.filter(function(v) { return v !== name })
     if (next.length === custom.length) next.push(name)
