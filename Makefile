@@ -8,11 +8,15 @@ test:
 	bash tests/apply-test.sh
 	bash tests/manifest-test.sh
 
-# Needs the Omarchy shell's Quickshell modules on the import path.
-# The onExited exitStatus warning is a known qmllint gap (first-party
-# services trip it too); everything else must be clean.
+# Needs the Omarchy shell's Quickshell modules on the import path. Quickshell
+# serves the shell directory as the `qs` module, so lint through a scratch root
+# holding a `qs` symlink. The onExited exitStatus warning is a known qmllint
+# gap (first-party services trip it too); dynamic lookups through `bar.shell`
+# and `Style.font.*` are typed as plain QObjects and also warn.
+QMLROOT := $(or $(TMPDIR),/tmp)/omarchy-theme-rgb-qmlroot
 qml-check:
-	$(QMLLINT) -I /usr/share/omarchy/shell --signal-handler-parameters disable Service.qml
+	mkdir -p $(QMLROOT) && ln -sfn /usr/share/omarchy/shell $(QMLROOT)/qs
+	$(QMLLINT) -I $(QMLROOT) -I /usr/share/omarchy/shell --signal-handler-parameters disable Service.qml Panel.qml
 
 validate: test qml-check
 	omarchy plugin validate .
