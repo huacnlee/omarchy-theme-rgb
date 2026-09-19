@@ -121,9 +121,9 @@ It reads the same settings file. To use it as a theme hook instead:
 omarchy hook install theme-set bin/omarchy-theme-rgb-apply
 ```
 
-`omarchy-theme-rgb-apply stops` prints the colours it would light for the
-desk and for everything else, and `omarchy-theme-rgb-apply variables` the
-theme's variables, without touching OpenRGB.
+`omarchy-theme-rgb-apply stops` prints the colours it would light and
+`omarchy-theme-rgb-apply variables` the theme's variables, without touching
+OpenRGB.
 
 ## Development
 
