@@ -26,6 +26,7 @@ Item {
   property int colors: 5
   property var custom: []
   property int brightness: 100
+  property string layout: "flow"         // "flow" | "rows" | "columns" | "zones"
 
   // [{ name, hex }] the current theme defines, for the swatches.
   property var variables: []
@@ -42,7 +43,6 @@ Item {
   property bool serverReady: false
   property bool syncing: false
   property bool applyPending: false
-  property string lastSyncedAt: ""
   property bool lastSyncFailed: false
 
   function localPath(url) {
@@ -68,6 +68,8 @@ Item {
     custom = Array.isArray(parsed.custom) ? parsed.custom.map(function(v) { return String(v) }) : []
     var b = Number(parsed.brightness)
     brightness = isFinite(b) && b >= 10 && b <= 100 ? Math.round(b) : 100
+    var l = String(parsed.layout || "")
+    layout = l === "rows" || l === "columns" || l === "zones" ? l : "flow"
   }
 
   // The panel's setters. Each writes the whole file, then re-syncs.
@@ -75,6 +77,12 @@ Item {
   function setSingle(name) { single = name; save() }
   function setAnchor(name) { anchor = name; save() }
   function setColors(n) { if (n === 3 || n === 5) { colors = n; save() } }
+  // One save for "palette with n colours", so the file never holds a half
+  // state between two writes.
+  function setPalette(n) { if (n === 3 || n === 5) { colors = n; mode = "palette"; save() } }
+  function setLayout(value) {
+    if (value === "flow" || value === "rows" || value === "columns" || value === "zones") { layout = value; save() }
+  }
   function toggleCustom(name) {
     var next = custom.filter(function(v) { return v !== name })
     if (next.length === custom.length) next.push(name)
@@ -89,27 +97,44 @@ Item {
   }
 
   // Written through a plain process (not FileView.setText) so the write is a
-  // simple truncate-and-write the config watch below sees as a modification,
-  // and so a save never races the reload of our own file.
+  // simple truncate-and-write the config watch below sees as a modification.
+  // Saves are serialised: a save requested while one is in flight runs once
+  // more when it finishes, with whatever the state is by then, so quick
+  // successive changes always end with the file holding the latest state.
+  // The preview and the hardware are refreshed only after the write landed,
+  // because the script reads the file.
+  property bool savePending: false
+  readonly property bool saving: saveProcess.running || savePending
+
   function save() {
+    if (saveProcess.running) {
+      savePending = true
+      return
+    }
     var payload = {
       mode: mode,
       single: single,
       anchor: anchor,
       colors: colors,
       custom: custom,
-      brightness: brightness
+      brightness: brightness,
+      layout: layout
     }
     saveProcess.command = ["bash", "-c",
       'mkdir -p "$(dirname "$1")" && printf "%s\\n" "$2" > "$1"', "_",
       root.configPath, JSON.stringify(payload, null, 2)]
     saveProcess.running = true
-    refreshStops()
-    apply()
   }
 
+  // The stops probe is never killed mid-run: a refresh during a run queues
+  // one more run, so the preview always ends on the current state.
+  property bool stopsPending: false
+
   function refreshStops() {
-    if (stopsProbe.running) stopsProbe.running = false
+    if (stopsProbe.running) {
+      stopsPending = true
+      return
+    }
     stopsProbe.running = true
   }
 
@@ -184,12 +209,17 @@ Item {
     path: root.configPath
     watchChanges: true
     printErrors: false
-    onLoaded: root.loadConfig(text())
-    onLoadFailed: root.loadConfig("")
+    // Our own writes land here too. While a save is in flight or queued the
+    // file lags the state, so do not let a stale read overwrite what the
+    // user just chose.
+    onLoaded: if (!root.saving) root.loadConfig(text())
+    onLoadFailed: if (!root.saving) root.loadConfig("")
     // An edit from outside the shell (an editor, a script) takes effect like
-    // one from the panel; our own saves land here too and just re-read what
-    // we already hold.
-    onFileChanged: reload()
+    // one from the panel.
+    onFileChanged: {
+      reload()
+      if (!root.saving) { root.refreshStops(); root.apply() }
+    }
   }
 
   FileView {
@@ -306,6 +336,13 @@ Item {
     id: saveProcess
     onExited: function(exitCode) {
       if (exitCode !== 0) console.warn("huacnlee.theme_rgb: could not write " + root.configPath)
+      if (root.savePending) {
+        root.savePending = false
+        root.save()
+        return
+      }
+      root.refreshStops()
+      root.apply()
     }
   }
 
@@ -342,6 +379,12 @@ Item {
         root.stops = next
       }
     }
+    onExited: function() {
+      if (root.stopsPending) {
+        root.stopsPending = false
+        root.refreshStops()
+      }
+    }
   }
 
   Process {
@@ -351,7 +394,6 @@ Item {
       root.syncing = false
       root.lastSyncFailed = exitCode !== 0
       if (exitCode !== 0) console.warn("huacnlee.theme_rgb: apply exited with " + exitCode)
-      else root.lastSyncedAt = Qt.formatTime(new Date(), "HH:mm")
       devicesFile.reload()
       if (root.applyPending) {
         root.applyPending = false

@@ -1,5 +1,7 @@
 # omarchy-theme-rgb
 
+**Your theme, on every light.**
+
 Lights every device [OpenRGB](https://openrgb.org) manages in the colours of
 the current [Omarchy](https://omarchy.org) theme. Switch themes and your
 keyboard, mouse, RAM, fans and strips follow; log in and they already match.
@@ -36,18 +38,26 @@ Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
   - *Custom* lights exactly the variables you pick, in the order you pick them.
 - **Theme colour** — swatches of the current theme's `accent red orange yellow
   green cyan blue magenta brown foreground`, as `colors.toml` defines them.
+- **Layout** — where several colours go. *Flow* lays bands along each
+  device's LEDs (top to bottom on most keyboards). On keyboards, *Rows* and
+  *Columns* place the bands by where each key actually sits, and *Zones*
+  colours the function keys, main block, modifiers, navigation cluster,
+  numpad and logo in turn; on other devices *Zones* colours each OpenRGB zone
+  (a mouse's logo, wheel and strip, say) in turn.
 - **Brightness** — 10–100 %. Applied to the colour values themselves, so it
   works the same in every OpenRGB mode.
 - **Preview** — the exact colours the LEDs get, as bands.
 - **Devices** — what OpenRGB found on the last sync, with LED counts.
 
-**Menu** — the `󰇘` button in the header lists *Sync now*, *Install OpenRGB*
-(only while it is missing; opens a floating terminal running
-`omarchy-pkg-add openrgb`, and the panel picks the install up on its own) and
-*GitHub*.
+**Menu** — the `󰇘` button in the header lists *Sync now* and *GitHub*.
 
-Several colours are laid out as contiguous bands across a device's LEDs, with
-hard edges between them. Keyboard: `←`/`→` move within a row, `↑`/`↓` between
+**Without OpenRGB** the panel shows a welcome page instead of the settings,
+with an *Install OpenRGB* button: it opens a floating terminal running
+`omarchy-pkg-add openrgb`, and the panel switches to the settings by itself
+once the package is in place.
+
+Several colours always sit in contiguous bands with hard edges between them,
+never blended. Keyboard: `←`/`→` move within a row, `↑`/`↓` between
 rows, `Enter` picks, `1`–`4` pick a colours mode, `r` syncs now, `m` opens the
 menu, `Esc` closes.
 
@@ -61,7 +71,8 @@ editing it by hand applies too:
   "anchor": "accent",
   "colors": 5,
   "custom": [],
-  "brightness": 100
+  "brightness": 100,
+  "layout": "flow"
 }
 ```
 

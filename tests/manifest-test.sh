@@ -32,7 +32,7 @@ grep -q 'omarchy/theme-rgb.json' Service.qml || fail "Service.qml must watch the
 grep -q '"stops"' Service.qml || fail "Service.qml must preview via the stops subcommand"
 grep -q '"variables"' Service.qml || fail "Service.qml must read the theme variables from the script"
 grep -q 'theme-rgb/devices' Service.qml || fail "Service.qml must read the device list the script records"
-for fn in setMode setSingle setAnchor setColors toggleCustom setBrightness; do
+for fn in setMode setSingle setAnchor setColors setPalette toggleCustom setBrightness setLayout; do
   grep -q "function $fn" Service.qml || fail "Service.qml must expose $fn"
 done
 # Without a server every openrgb call re-probes the hardware for seconds; the
@@ -44,6 +44,11 @@ for fn in setMode setSingle setAnchor setColors toggleCustom setBrightness; do
   grep -q "service.$fn" Panel.qml || fail "Panel.qml must forward $fn to the service"
 done
 grep -q '"DEVICES"' Panel.qml || fail "Panel.qml must list the devices"
+grep -q '"LAYOUT"' Panel.qml || fail "Panel.qml must offer the layout choice"
+grep -q 'service.setLayout' Panel.qml || fail "Panel.qml must forward setLayout to the service"
+grep -q 'Your theme, on every light.' Panel.qml || fail "Panel.qml must carry the slogan"
+grep -q 'Install OpenRGB' Panel.qml || fail "Panel.qml must offer the install from its welcome page"
+! grep -q 'shellQuote' Panel.qml || fail "the bar API has no shellQuote"
 ! grep -q 'omarchy-theme-rgb-apply' Panel.qml || fail "Panel.qml must not run the script itself"
 
 # The header menu: sync, an install that goes through Omarchy's own package

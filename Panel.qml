@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Quickshell
 import qs.Commons
 import qs.Ui
 import "components"
@@ -57,13 +58,25 @@ Panel {
 
   // What is actually lit: a theme may not have five distinct hues to offer.
   // Anything that needs attention takes this line over.
+  readonly property string slogan: "Your theme, on every light."
+  // The slogan, unless something needs attention.
   readonly property string metaText: {
     if (!service) return "Service not running"
     if (!openrgbPresent) return "OpenRGB is not installed"
     if (syncing) return "Syncing…"
     if (service.lastSyncFailed) return "Last sync failed"
-    return stops.length <= 1 ? "One theme colour" : stops.length + " theme colours in bands"
+    return slogan
   }
+  readonly property string layout: service ? String(service.layout) : "flow"
+  readonly property var layouts: [
+    { value: "flow", label: "Flow", tooltip: "Bands along the LED order — top to bottom on most keyboards" },
+    { value: "rows", label: "Rows", tooltip: "Keyboard rows top to bottom, by where each key sits" },
+    { value: "columns", label: "Columns", tooltip: "Left to right across the keyboard, by where each key sits" },
+    { value: "zones", label: "Zones", tooltip: "Function keys, main block, modifiers, navigation, numpad, logo; other devices by their OpenRGB zones" }
+  ]
+  readonly property string layoutHint: stops.length <= 1
+    ? "One colour needs no layout."
+    : stops.length + " colours" + (layout === "zones" ? " over the zones of each device." : " in bands, " + (layout === "flow" ? "along each device's LEDs." : (layout === "rows" ? "top to bottom." : "left to right.")))
   readonly property string swatchHeading: mode === "single" ? "THEME COLOUR" : (mode === "custom" ? "COLOURS TO LIGHT" : "AROUND")
   readonly property string swatchHint: {
     if (mode === "single") return "The variable from colors.toml every device shows."
@@ -80,7 +93,11 @@ Panel {
   function chooseMode(value) {
     if (!service) return
     if (value === "single" || value === "custom") service.setMode(value)
-    else { service.setColors(Number(value)); if (mode !== "palette") service.setMode("palette") }
+    else service.setPalette(Number(value))
+  }
+
+  function chooseLayout(value) {
+    if (service) service.setLayout(value)
   }
 
   function chooseVariable(name) {
@@ -99,20 +116,20 @@ Panel {
     if (service && !syncing) service.apply()
   }
 
-  // The actions that do not earn a control of their own. Installing only
-  // appears while there is something to install.
-  readonly property var menuEntries: {
-    var list = [{ id: "sync", label: "Sync now", enabled: openrgbPresent && !syncing }]
-    if (!openrgbPresent) list.push({ id: "install", label: "Install OpenRGB", enabled: !!service })
-    list.push({ separator: true })
-    list.push({ id: "github", label: "GitHub", enabled: !!bar })
-    return list
-  }
+  // The actions that do not earn a control of their own.
+  readonly property var menuEntries: [
+    { id: "sync", label: "Sync now", enabled: openrgbPresent && !syncing },
+    { separator: true },
+    { id: "github", label: "GitHub", enabled: true }
+  ]
 
   function runMenuAction(id) {
     if (id === "sync") syncNow()
-    else if (id === "install" && service && !openrgbPresent) { service.installOpenrgb(); close() }
-    else if (id === "github" && bar) { bar.run("xdg-open " + bar.shellQuote(githubUrl)); close() }
+    else if (id === "github") { Quickshell.execDetached(["xdg-open", githubUrl]); close() }
+  }
+
+  function installOpenrgb() {
+    if (service && !openrgbPresent) service.installOpenrgb()
   }
 
   function openMenu() {
@@ -128,11 +145,12 @@ Panel {
   function rowLength(row) {
     if (row === "mode") return modes.length
     if (row === "swatch") return variables.length
+    if (row === "layout") return layouts.length
     return 1
   }
 
   function moveCursor(dx, dy) {
-    var rows = ["mode", "swatch", "brightness"]
+    var rows = ["mode", "swatch", "layout", "brightness"]
     var r = rows.indexOf(cursorRow)
     if (dy !== 0) {
       r = Math.max(0, Math.min(rows.length - 1, r + dy))
@@ -152,6 +170,7 @@ Panel {
   function activateCursor() {
     if (cursorRow === "mode") chooseMode(modes[cursorIndex].value)
     else if (cursorRow === "swatch" && variables[cursorIndex]) chooseVariable(variables[cursorIndex].name)
+    else if (cursorRow === "layout") chooseLayout(layouts[cursorIndex].value)
   }
 
   // Bar icon --------------------------------------------------------------
@@ -208,7 +227,7 @@ Panel {
     focusTarget: keyCatcher
     // Wide enough for the five mode chips in one row at any font size; the
     // Row's laid-out width is what the chips actually take.
-    contentWidth: panel.fittedContentWidth(Math.max(Style.space(360), modeGroup.width))
+    contentWidth: panel.fittedContentWidth(Math.max(Style.space(360), modeGroup.width, layoutGroup.width))
     contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(900))
 
     PanelKeyCatcher {
@@ -295,6 +314,48 @@ Panel {
         }
 
         PanelSeparator { width: parent.width; foreground: themeRgb.foreground }
+
+        // Welcome: nothing to set up until OpenRGB is installed --------------
+        Column {
+          width: parent.width
+          spacing: Style.space(10)
+          visible: !themeRgb.openrgbPresent
+
+          Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "Theme RGB lights your keyboard, mouse, RAM, fans and strips in the colours of the current theme, on every theme switch and at login. It drives them through OpenRGB, which is not installed yet."
+            color: themeRgb.foreground
+            font.family: themeRgb.fontFamily
+            font.pixelSize: Style.font.body
+          }
+
+          Button {
+            text: "Install OpenRGB"
+            iconText: "󰏔"
+            bordered: true
+            foreground: themeRgb.foreground
+            fontFamily: themeRgb.fontFamily
+            enabled: !!themeRgb.service
+            onClicked: themeRgb.installOpenrgb()
+          }
+
+          Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "Installs the openrgb package in a terminal. Once it is in place this panel switches to the colour settings by itself."
+            color: themeRgb.dim
+            font.family: themeRgb.fontFamily
+            font.pixelSize: Style.font.caption
+          }
+        }
+
+        // Settings ----------------------------------------------------------
+        Column {
+          id: settings
+          width: parent.width
+          spacing: Style.space(12)
+          visible: themeRgb.openrgbPresent
 
         // Mode ------------------------------------------------------------
         Column {
@@ -422,6 +483,45 @@ Panel {
             width: parent.width
             wrapMode: Text.WordWrap
             text: themeRgb.variables.length === 0 ? "This theme has no colors.toml." : themeRgb.swatchHint
+            color: themeRgb.dim
+            font.family: themeRgb.fontFamily
+            font.pixelSize: Style.font.caption
+          }
+        }
+
+        // Layout ----------------------------------------------------------
+        Column {
+          width: parent.width
+          spacing: Style.space(8)
+          opacity: themeRgb.stops.length > 1 ? 1.0 : 0.5
+
+          PanelSectionHeader {
+            text: "LAYOUT"
+            foreground: themeRgb.foreground
+            fontFamily: themeRgb.fontFamily
+          }
+
+          ButtonGroup {
+            id: layoutGroup
+            options: themeRgb.layouts
+            value: themeRgb.layout
+            foreground: themeRgb.foreground
+            fontFamily: themeRgb.fontFamily
+            focusable: false
+            cursorIndex: themeRgb.cursorActive && themeRgb.cursorRow === "layout" ? themeRgb.cursorIndex : -1
+            onChanged: function(v) { themeRgb.chooseLayout(v) }
+            onHovered: function(index, isHovered) {
+              if (!isHovered) return
+              themeRgb.cursorActive = true
+              themeRgb.cursorRow = "layout"
+              themeRgb.cursorIndex = index
+            }
+          }
+
+          Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: themeRgb.layoutHint
             color: themeRgb.dim
             font.family: themeRgb.fontFamily
             font.pixelSize: Style.font.caption
@@ -561,6 +661,7 @@ Panel {
             font.family: themeRgb.fontFamily
             font.pixelSize: Style.font.caption
           }
+        }
         }
       }
       }
