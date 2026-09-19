@@ -78,3 +78,49 @@ A palette glyph in the bar; the popout has one row of four buttons — Single /
 "Sync now" button and a last-sync status line. Choosing a button writes
 `theme-rgb.json`; the service applies it. Not placing the widget leaves the
 service running on defaults.
+
+## Revision 3 — pick the theme variables, bands not blends, brightness
+
+The accent is often a conservative colour, so every mode lets the user say
+which theme variables to light. Colours sit in clean bands on a device; they
+are never blended. Light level is a setting.
+
+### Configuration
+
+```json
+{
+  "mode": "single" | "palette" | "custom",
+  "single": "accent",
+  "anchor": "accent",
+  "colors": 5,
+  "custom": ["blue", "magenta"],
+  "brightness": 100
+}
+```
+
+Variables: `accent red orange yellow green cyan blue magenta brown foreground`
+from `colors.toml`. Defaults: `palette`, `accent`, `5`, `[]`, `100`. With no
+`single` key, single mode uses the theme's `keyboard.rgb` if it ships one,
+else the accent; a chosen variable always wins.
+
+### Script
+
+- `variables` subcommand: `name hex` per line for every variable the current
+  theme defines, raw. The panel draws its swatches from this.
+- `stops`: single → the chosen variable; palette → anchor plus the N−1 theme
+  colours nearest its hue (as before, around the anchor instead of always the
+  accent); custom → the listed variables in the listed order. Every stop is
+  then scaled by `brightness/100`. No mixing toward white any more: what the
+  theme says is what lights.
+- Apply: single goes through `static` (or the device's gradient mode) at
+  `-b 100` with the scaled colour; palette and custom write per LED with no
+  mode, LED *i* of *N* taking stop `floor(i·k/N)` — *k* contiguous bands.
+  Unknown LED count sends the stops as they are.
+
+### Panel
+
+Sections: COLOURS (Single / 2 / 3 / 5 / Custom), THEME COLOUR (ten swatches
+from `variables`; single-select for Single and as the anchor for 2/3/5,
+multi-select in click order for Custom), BRIGHTNESS (slider 10–100), and the
+preview strip drawn as bands. Keyboard: ←/→ within a row, ↑/↓ between rows,
+Enter selects, `1`–`5` pick a mode, `r` syncs.

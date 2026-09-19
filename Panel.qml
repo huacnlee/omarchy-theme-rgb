@@ -11,6 +11,9 @@ Panel {
   id: themeRgb
   moduleName: "huacnlee.theme_rgb"
   ipcTarget: "huacnlee.theme_rgb"
+  // The bar registers the IPC handler for placed widgets; a second one here
+  // would only log that it is unused.
+  manageIpc: false
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
@@ -117,7 +120,8 @@ Panel {
     bar: themeRgb.bar
     open: themeRgb.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(340))
+    // Wide enough for the four choice chips in one row at any font size.
+    contentWidth: panel.fittedContentWidth(Math.max(Style.space(340), choiceGroup.implicitWidth))
     contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(400))
 
     PanelKeyCatcher {
