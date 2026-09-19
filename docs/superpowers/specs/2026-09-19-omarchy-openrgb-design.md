@@ -39,3 +39,42 @@ installable plugin instead of a change to Omarchy itself.
 - `tests/manifest-test.sh` — manifest agrees with Service.qml and passes
   `omarchy plugin validate`.
 - `make qml-check` lints Service.qml against `/usr/share/omarchy/shell`.
+
+## Revision 2 — palette modes and a settings panel
+
+Hardware light must read as the current theme, never as a generic rainbow, and
+the user picks how many theme colours are used from a bar panel.
+
+### Configuration
+
+`~/.config/omarchy/openrgb.json`: `{"mode": "single" | "palette", "colors": 2 | 3 | 5}`.
+Missing file or field → `palette`, `5`. Both `Service.qml` and the panel watch
+the file; the script reads it with `jq`.
+
+### Colour selection (bin/omarchy-openrgb-apply)
+
+- `single`: as before (keyboard.rgb → accent, `-m static`).
+- `palette`: candidates are `accent` plus `red orange yellow green cyan blue
+  magenta brown` from `colors.toml` (no `bright_*`), deduplicated by hex and by
+  hue within 10°. Each candidate is scored by hue distance from the accent;
+  tier N keeps the accent plus the N−1 nearest, then orders them by signed hue
+  offset from the accent so the gradient flows smoothly through it. Fewer than
+  two usable colours → fall back to `single`.
+- Brighten is 15% toward white for every mode (was 40%): enough to lift dim
+  LEDs without shifting the colour away from what is on screen.
+- Per device the `LEDs:` line gives the LED count; the stops are linearly
+  interpolated to that many colours and sent as `-d N -c c1,c2,…` with no
+  `-m` (verified on ENE DRAM and Razer: per-LED writes persist). Still one
+  probe plus one chained call.
+- `omarchy-openrgb-apply stops` prints the stops for the current theme and
+  config, one hex per line, without touching OpenRGB. The panel preview uses
+  it so the UI and the hardware share one implementation.
+
+### Panel (bar widget)
+
+`kinds: ["service", "bar-widget"]`, `entryPoints.barWidget = "Panel.qml"`.
+A palette glyph in the bar; the popout has one row of four buttons — Single /
+2 colours / 3 colours / 5 colours — a preview strip drawn from `stops`, a
+"Sync now" button and a last-sync status line. Choosing a button writes
+`openrgb.json`; the service applies it. Not placing the widget leaves the
+service running on defaults.
