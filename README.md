@@ -25,29 +25,19 @@ in the bar. It syncs once when the shell starts and again every time
 
 Remove it with `omarchy plugin remove huacnlee.theme_rgb`.
 
-## The window
+## The panel
 
-Click the palette glyph in the bar (or run `omarchy-shell shell toggle
-huacnlee.theme_rgb`); middle-click syncs without opening anything. Settings
-sit on the left, the devices OpenRGB found on the right.
+Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
 
-- **Colours** — `1`, `3`, `Default` (five), `8` or `Custom`.
-  - *1* lights one theme variable on every device: the accent unless you
-    pick another.
-  - *3* lights the accent and two named colours; *Default* (five) and *8*
-    light the theme's named colours only, in an order that suits what each
-    device is for: on the desk (keyboard, mouse, headset, pad) `blue, yellow,
-    red, green, magenta, cyan…`; around it (screen, strips, RAM, motherboard,
-    case) `blue, magenta, cyan, red, green, yellow…`. Background and
-    foreground are left out on purpose — near black and near white make dark
-    or colourless bands — but stay available to pick by hand. Click a swatch
-    to put it first for that class. Variables the theme lacks, and repeated
-    colours, are skipped.
-  - *Custom* lights exactly the variables you pick, in the order you pick them.
-- **Theme colour** — swatches of the current theme's `accent background red
-  orange yellow green cyan blue magenta brown foreground`, as `colors.toml`
-  defines them. The LEDs get exactly those values, so a theme controls the
-  colours precisely: a dark background is a dark glow.
+- **Colours** — `1`, `3`, `Default` (five) or `8`. *1* is the accent on
+  every device. *3* is the accent and two of the theme's named colours.
+  *Default* and *8* are the theme's named colours only, in an order that
+  suits what each device is for: on the desk (keyboard, mouse, headset, pad)
+  `blue, yellow, red, green, magenta, cyan…`; around it (screen, strips,
+  RAM, motherboard, case) `blue, magenta, cyan, red, green, yellow…`.
+  Background and foreground never join in — near black and near white make
+  dark or colourless bands. Colours the theme lacks, and repeated ones, are
+  skipped. There is nothing to pick by hand: Omarchy is chef's choice.
 - **Layout** — where several colours go. *Flow* lays bands along each
   device's LEDs (top to bottom on most keyboards). On keyboards, *Rows* and
   *Columns* place the bands by where each key actually sits, and *Zones*
@@ -62,9 +52,9 @@ sit on the left, the devices OpenRGB found on the right.
 
 **Menu** — the `󰇘` button in the header lists *Sync now* and *GitHub*.
 
-**Without OpenRGB** the window shows a welcome page instead of the settings,
+**Without OpenRGB** the panel shows a welcome page instead of the settings,
 with an *Install OpenRGB* button: it opens a floating terminal running
-`omarchy-pkg-add openrgb`, and the window switches to the settings by itself
+`omarchy-pkg-add openrgb`, and the panel switches to the settings by itself
 once the package is in place.
 
 Several colours always sit in contiguous bands with hard edges between them,
@@ -78,17 +68,16 @@ editing it by hand applies too:
 ```json
 {
   "mode": "palette",
-  "single": "",
   "colors": 5,
-  "custom": [],
   "brightness": 100,
-  "layout": "flow",
-  "roles": { "desk": [], "ambient": [] }
+  "layout": "flow"
 }
-
-Empty `roles` mean the defaults above; a list there is the full order for
-that class.
 ```
+
+For the curious, the script also honours `"single": "<variable>"`,
+`"mode": "custom"` with `"custom": ["blue", "magenta"]`, and
+`"roles": { "desk": [...], "ambient": [...] }` to reorder the tiers — none
+of which the panel exposes.
 
 ## Speed
 

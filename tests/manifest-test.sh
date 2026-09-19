@@ -11,9 +11,7 @@ fail() { echo "not ok - $*" >&2; exit 1; }
 [[ $(jq -r '.schemaVersion' manifest.json) == 1 ]] || fail "schemaVersion must be 1"
 [[ $(jq -r '.id' manifest.json) == huacnlee.theme_rgb ]] || fail "id must be huacnlee.theme_rgb"
 [[ $(jq -r '.name' manifest.json) == "Theme RGB" ]] || fail "name must be Theme RGB"
-[[ $(jq -c '.kinds' manifest.json) == '["service","bar-widget","panel"]' ]] || fail "kinds must be [service, bar-widget, panel]"
-[[ $(jq -r '.entryPoints.panel' manifest.json) == App.qml ]] || fail "panel entry point must be App.qml"
-[[ -f App.qml ]] || fail "App.qml is missing"
+[[ $(jq -c '.kinds' manifest.json) == '["service","bar-widget"]' ]] || fail "kinds must be [service, bar-widget]"
 [[ $(jq -r '.entryPoints.service' manifest.json) == Service.qml ]] || fail "service entry point must be Service.qml"
 [[ $(jq -r '.entryPoints.barWidget' manifest.json) == Panel.qml ]] || fail "bar widget entry point must be Panel.qml"
 [[ $(jq -r '.barWidget.allowMultiple' manifest.json) == false ]] || fail "barWidget.allowMultiple must be false"
@@ -41,37 +39,34 @@ done
 # service keeps a headless one for the life of the shell.
 grep -q '"openrgb", "--server", "--noautoconnect"' Service.qml || fail "Service.qml must keep a headless OpenRGB server"
 grep -q 'moduleName: "huacnlee.theme_rgb"' Panel.qml || fail "Panel.qml must declare moduleName huacnlee.theme_rgb"
-grep -q 'bar.shell.toggle(moduleName' Panel.qml || fail "Panel.qml must open the window through the shell"
-grep -q 'FloatingWindow {' App.qml || fail "App.qml must be a floating window"
-for fn in open close requestClose; do
-  grep -q "function $fn" App.qml || fail "App.qml must expose $fn for the shell"
-done
 grep -q 'serviceFor(moduleName)' Panel.qml || fail "Panel.qml must look up its own service"
-for fn in setMode setSingle setPalette setRolePrimary toggleCustom setBrightness setLayout; do
-  grep -q "service.$fn" App.qml || fail "App.qml must forward $fn to the service"
+for fn in setMode setPalette setBrightness setLayout; do
+  grep -q "service.$fn" Panel.qml || fail "Panel.qml must forward $fn to the service"
 done
-grep -q '"DEVICES"' App.qml || fail "App.qml must list the devices"
-grep -q '"LAYOUT"' App.qml || fail "App.qml must offer the layout choice"
-grep -q 'service.setLayout' App.qml || fail "App.qml must forward setLayout to the service"
-grep -q 'Your theme, on every light.' App.qml || fail "App.qml must carry the slogan"
-grep -q 'Install OpenRGB' App.qml || fail "App.qml must offer the install from its welcome page"
-! grep -q 'shellQuote' App.qml || fail "the bar API has no shellQuote"
+# Colours are not picked by hand: the tiers are the whole choice.
+! grep -q 'toggleCustom\|setRolePrimary\|setSingle' Panel.qml || fail "Panel.qml must not offer colour picking"
+grep -q '"DEVICES"' Panel.qml || fail "Panel.qml must list the devices"
+grep -q '"LAYOUT"' Panel.qml || fail "Panel.qml must offer the layout choice"
+grep -q 'service.setLayout' Panel.qml || fail "Panel.qml must forward setLayout to the service"
+grep -q 'Your theme, on every light.' Panel.qml || fail "Panel.qml must carry the slogan"
+grep -q 'Install OpenRGB' Panel.qml || fail "Panel.qml must offer the install from its welcome page"
+! grep -q 'shellQuote' Panel.qml || fail "the bar API has no shellQuote"
 ! grep -q 'omarchy-theme-rgb-apply' Panel.qml || fail "Panel.qml must not run the script itself"
 
 # The header menu: sync, an install that goes through Omarchy's own package
 # helper in a terminal the user can see (then re-probed by the service), and
 # the project link.
 [[ -f components/PanelMenu.qml ]] || fail "components/PanelMenu.qml is missing"
-grep -q 'PanelMenu {' App.qml || fail "App.qml must show the header menu"
-grep -q 'https://github.com/huacnlee/omarchy-theme-rgb' App.qml || fail "App.qml must link to the GitHub repository"
-grep -q 'service.installOpenrgb()' App.qml || fail "App.qml must ask the service to install OpenRGB"
+grep -q 'PanelMenu {' Panel.qml || fail "Panel.qml must show the header menu"
+grep -q 'https://github.com/huacnlee/omarchy-theme-rgb' Panel.qml || fail "Panel.qml must link to the GitHub repository"
+grep -q 'service.installOpenrgb()' Panel.qml || fail "Panel.qml must ask the service to install OpenRGB"
 grep -q 'function installOpenrgb' Service.qml || fail "Service.qml must expose installOpenrgb"
 grep -q 'function recheckOpenrgb' Service.qml || fail "Service.qml must expose recheckOpenrgb"
 grep -q 'omarchy-launch-floating-terminal-with-presentation omarchy-pkg-add openrgb' Service.qml \
   || fail "Service.qml must install openrgb through omarchy-pkg-add in a floating terminal"
 
 # Never escalate or touch the package manager from inside the shell.
-! grep -Eq '\b(sudo|pkexec|pacman|yay)\b' Service.qml Panel.qml App.qml bin/omarchy-theme-rgb-apply \
+! grep -Eq '\b(sudo|pkexec|pacman|yay)\b' Service.qml Panel.qml bin/omarchy-theme-rgb-apply \
   || fail "plugin code must not escalate privileges or manage packages"
 
 if command -v omarchy-plugin-validate >/dev/null 2>&1; then

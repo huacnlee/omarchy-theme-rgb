@@ -46,8 +46,6 @@ Item {
   property var devices: []
 
   property bool openrgbPresent: false
-  // Set by the window (App.qml) so the bar widget can mark it open.
-  property bool windowOpen: false
   property bool serverRunning: false
   // True once an SDK server answers on its port (ours or the user's), or once
   // we have given up waiting. Until then applies queue: a direct probe while
