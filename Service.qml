@@ -5,7 +5,8 @@ import Quickshell.Io
 // Keeps OpenRGB devices in the theme's colours. The colour maths and device
 // handling live in bin/omarchy-theme-rgb-apply so they can be tested (and
 // reused as a plain theme-set hook) without a running shell; this service
-// decides *when* to run it and holds the state the bar panel shows.
+// decides *when* to run it, keeps a headless OpenRGB server alive so each run
+// takes a second rather than fifteen, and holds the state the bar panel shows.
 Item {
   id: root
 
@@ -15,13 +16,26 @@ Item {
 
   readonly property string home: Quickshell.env("HOME")
   readonly property string configPath: home + "/.config/omarchy/theme-rgb.json"
+  readonly property string devicesPath: home + "/.local/state/omarchy/theme-rgb/devices"
   readonly property string applyScript: localPath(Qt.resolvedUrl("bin/omarchy-theme-rgb-apply"))
 
-  // "single" | "2" | "3" | "5" — what theme-rgb.json says, default 5 colours.
-  property string choice: "5"
-  // Brightened hex colours the script will light, for the panel preview.
+  // What theme-rgb.json says, with the script's defaults.
+  property string mode: "palette"        // "single" | "palette" | "custom"
+  property string single: ""             // "" = keyboard.rgb, else accent
+  property string anchor: "accent"
+  property int colors: 5
+  property var custom: []
+  property int brightness: 100
+
+  // [{ name, hex }] the current theme defines, for the swatches.
+  property var variables: []
+  // "#rrggbb" colours the script will light, for the preview.
   property var stops: []
+  // [{ id, name, leds }] found on the last apply.
+  property var devices: []
+
   property bool openrgbPresent: false
+  property bool serverRunning: false
   property bool syncing: false
   property bool applyPending: false
   property string lastSyncedAt: ""
@@ -32,31 +46,72 @@ Item {
     return s.indexOf("file://") === 0 ? decodeURIComponent(s.substring(7)) : s
   }
 
-  function choiceFromConfig(raw) {
-    var parsed = null
-    try { parsed = JSON.parse(String(raw || "")) } catch (e) { parsed = null }
-    if (!parsed || typeof parsed !== "object") return "5"
-    if (parsed.mode === "single") return "single"
-    var n = Number(parsed.colors)
-    return n === 2 || n === 3 || n === 5 ? String(n) : "5"
+  function isVariable(name) {
+    for (var i = 0; i < variables.length; i++)
+      if (variables[i].name === name) return true
+    return false
   }
 
-  // The panel calls this. Writing the file is what changes the setting; the
-  // apply is explicit rather than left to the file watch, which an atomic
-  // rename can slip past.
-  function setChoice(value) {
-    var next = String(value)
-    if (next !== "single" && next !== "2" && next !== "3" && next !== "5") return
-    root.choice = next
-    var payload = next === "single" ? { mode: "single" } : { mode: "palette", colors: Number(next) }
-    configFile.setText(JSON.stringify(payload, null, 2) + "\n")
+  function loadConfig(raw) {
+    var parsed = null
+    try { parsed = JSON.parse(String(raw || "")) } catch (e) { parsed = null }
+    if (!parsed || typeof parsed !== "object") parsed = {}
+    mode = parsed.mode === "single" || parsed.mode === "custom" ? parsed.mode : "palette"
+    single = typeof parsed.single === "string" ? parsed.single : ""
+    anchor = typeof parsed.anchor === "string" && parsed.anchor !== "" ? parsed.anchor : "accent"
+    var n = Number(parsed.colors)
+    colors = n === 2 || n === 3 ? n : 5
+    custom = Array.isArray(parsed.custom) ? parsed.custom.map(function(v) { return String(v) }) : []
+    var b = Number(parsed.brightness)
+    brightness = isFinite(b) && b >= 10 && b <= 100 ? Math.round(b) : 100
+  }
+
+  // The panel's setters. Each writes the whole file, then re-syncs.
+  function setMode(value) { if (value === "single" || value === "palette" || value === "custom") { mode = value; save() } }
+  function setSingle(name) { single = name; save() }
+  function setAnchor(name) { anchor = name; save() }
+  function setColors(n) { if (n === 2 || n === 3 || n === 5) { colors = n; save() } }
+  function toggleCustom(name) {
+    var next = custom.filter(function(v) { return v !== name })
+    if (next.length === custom.length) next.push(name)
+    custom = next
+    save()
+  }
+  function setBrightness(value) {
+    var b = Math.round(Number(value))
+    if (!isFinite(b)) return
+    brightness = Math.max(10, Math.min(100, b))
+    save()
+  }
+
+  // Written through a plain process (not FileView.setText) so the write is a
+  // simple truncate-and-write the config watch below sees as a modification,
+  // and so a save never races the reload of our own file.
+  function save() {
+    var payload = {
+      mode: mode,
+      single: single,
+      anchor: anchor,
+      colors: colors,
+      custom: custom,
+      brightness: brightness
+    }
+    saveProcess.command = ["bash", "-c",
+      'mkdir -p "$(dirname "$1")" && printf "%s\\n" "$2" > "$1"', "_",
+      root.configPath, JSON.stringify(payload, null, 2)]
+    saveProcess.running = true
     refreshStops()
     apply()
   }
 
   function refreshStops() {
-    if (stopsProbe.running) { stopsProbe.running = false }
+    if (stopsProbe.running) stopsProbe.running = false
     stopsProbe.running = true
+  }
+
+  function refreshVariables() {
+    if (variablesProbe.running) variablesProbe.running = false
+    variablesProbe.running = true
   }
 
   // Coalesce: a change that lands while a run is in flight queues one more
@@ -72,6 +127,7 @@ Item {
   }
 
   function onThemeChanged() {
+    refreshVariables()
     refreshStops()
     apply()
   }
@@ -80,17 +136,32 @@ Item {
     id: configFile
     path: root.configPath
     watchChanges: true
-    atomicWrites: true
     printErrors: false
-    onLoaded: root.choice = root.choiceFromConfig(text())
-    onLoadFailed: root.choice = "5"
-    // An edit from outside the shell (an editor, a script) should take effect
-    // like one from the panel.
-    onFileChanged: {
-      reload()
-      root.refreshStops()
-      root.apply()
+    onLoaded: root.loadConfig(text())
+    onLoadFailed: root.loadConfig("")
+    // An edit from outside the shell (an editor, a script) takes effect like
+    // one from the panel; our own saves land here too and just re-read what
+    // we already hold.
+    onFileChanged: reload()
+  }
+
+  FileView {
+    id: devicesFile
+    path: root.devicesPath
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      var lines = String(text() || "").split("\n")
+      var next = []
+      for (var i = 0; i < lines.length; i++) {
+        var parts = lines[i].split("|")
+        if (parts.length < 3) continue
+        next.push({ id: parts[0], name: parts[1], leds: Number(parts[2]) || 0 })
+      }
+      root.devices = next
     }
+    onLoadFailed: root.devices = []
+    onFileChanged: reload()
   }
 
   // omarchy-theme-set writes theme.name only after the new theme directory
@@ -106,7 +177,83 @@ Item {
   Process {
     id: openrgbProbe
     command: ["bash", "-c", "command -v openrgb"]
-    onExited: function(exitCode) { root.openrgbPresent = exitCode === 0 }
+    onExited: function(exitCode) {
+      root.openrgbPresent = exitCode === 0
+      if (root.openrgbPresent) root.startServer()
+    }
+  }
+
+  // Without a server every `openrgb` call re-probes the hardware (seconds per
+  // call). Keep a headless SDK server for the life of the shell; the CLI
+  // autoconnects to it. If the user already runs one the bind fails and we
+  // quietly use theirs; if ours dies we try again after a pause, not in a
+  // tight loop.
+  property int serverStarts: 0
+
+  function startServer() {
+    if (serverProcess.running || serverStarts >= 5) return
+    serverStarts++
+    serverProcess.running = true
+  }
+
+  Process {
+    id: serverProcess
+    command: ["openrgb", "--server", "--noautoconnect"]
+    stderr: StdioCollector {
+      onStreamFinished: {
+        var msg = String(text || "").trim()
+        if (msg !== "") console.warn("huacnlee.theme_rgb: openrgb server: " + msg.split("\n").slice(-3).join(" | "))
+      }
+    }
+    onStarted: {
+      root.serverRunning = true
+      // Give the server a moment to enumerate before the first apply.
+      firstApplyTimer.restart()
+    }
+    onExited: function(exitCode) {
+      root.serverRunning = false
+      console.warn("huacnlee.theme_rgb: openrgb server exited with " + exitCode + " (start " + root.serverStarts + ")")
+      serverRetryTimer.restart()
+    }
+  }
+
+  Timer {
+    id: serverRetryTimer
+    interval: 30000
+    repeat: false
+    onTriggered: root.startServer()
+  }
+
+  Timer {
+    id: firstApplyTimer
+    interval: 1500
+    repeat: false
+    onTriggered: root.apply()
+  }
+
+  Process {
+    id: saveProcess
+    onExited: function(exitCode) {
+      if (exitCode !== 0) console.warn("huacnlee.theme_rgb: could not write " + root.configPath)
+    }
+  }
+
+  Process {
+    id: variablesProbe
+    command: ["bash", root.applyScript, "variables"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var lines = String(text || "").trim().split("\n")
+        var next = []
+        for (var i = 0; i < lines.length; i++) {
+          var parts = lines[i].trim().split(/\s+/)
+          if (parts.length === 2 && /^[0-9a-f]{6}$/.test(parts[1]))
+            next.push({ name: parts[0], hex: "#" + parts[1] })
+        }
+        root.variables = next
+      }
+    }
   }
 
   Process {
@@ -134,6 +281,7 @@ Item {
       root.lastSyncFailed = exitCode !== 0
       if (exitCode !== 0) console.warn("huacnlee.theme_rgb: apply exited with " + exitCode)
       else root.lastSyncedAt = Qt.formatTime(new Date(), "HH:mm")
+      devicesFile.reload()
       if (root.applyPending) {
         root.applyPending = false
         root.apply()
@@ -144,6 +292,7 @@ Item {
   // Match the theme at shell start (login) and whenever the plugin is enabled.
   Component.onCompleted: {
     openrgbProbe.running = true
+    refreshVariables()
     refreshStops()
     apply()
   }

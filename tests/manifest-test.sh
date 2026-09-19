@@ -30,10 +30,20 @@ grep -q 'omarchy/theme-rgb.json' Service.qml || fail "Service.qml must watch the
 # the script's own `stops` output so the UI never drifts from the hardware.
 # The panel only shows that state and forwards the user's choice.
 grep -q '"stops"' Service.qml || fail "Service.qml must preview via the stops subcommand"
-grep -q 'function setChoice' Service.qml || fail "Service.qml must expose setChoice"
+grep -q '"variables"' Service.qml || fail "Service.qml must read the theme variables from the script"
+grep -q 'theme-rgb/devices' Service.qml || fail "Service.qml must read the device list the script records"
+for fn in setMode setSingle setAnchor setColors toggleCustom setBrightness; do
+  grep -q "function $fn" Service.qml || fail "Service.qml must expose $fn"
+done
+# Without a server every openrgb call re-probes the hardware for seconds; the
+# service keeps a headless one for the life of the shell.
+grep -q '"openrgb", "--server", "--noautoconnect"' Service.qml || fail "Service.qml must keep a headless OpenRGB server"
 grep -q 'moduleName: "huacnlee.theme_rgb"' Panel.qml || fail "Panel.qml must declare moduleName huacnlee.theme_rgb"
 grep -q 'serviceFor(moduleName)' Panel.qml || fail "Panel.qml must look up its own service"
-grep -q 'service.setChoice' Panel.qml || fail "Panel.qml must forward choices to the service"
+for fn in setMode setSingle setAnchor setColors toggleCustom setBrightness; do
+  grep -q "service.$fn" Panel.qml || fail "Panel.qml must forward $fn to the service"
+done
+grep -q '"DEVICES"' Panel.qml || fail "Panel.qml must list the devices"
 ! grep -q 'omarchy-theme-rgb-apply' Panel.qml || fail "Panel.qml must not run the script itself"
 
 # Never escalate or touch the package manager from inside the shell.
