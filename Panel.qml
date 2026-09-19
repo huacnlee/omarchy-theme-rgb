@@ -35,32 +35,47 @@ Panel {
   readonly property string githubUrl: "https://github.com/huacnlee/omarchy-theme-rgb"
 
   readonly property var modes: [
-    { value: "single", label: "Single", tooltip: "One theme colour on every device" },
-    { value: "3", label: "3", tooltip: "Three colours: the chosen one plus the two nearest theme hues" },
-    { value: "5", label: "5", tooltip: "Up to five: the chosen one plus the nearest theme hues within 90°" },
+    { value: "single", label: "Single", tooltip: "One theme colour on every device — the accent unless you pick another" },
+    { value: "3", label: "3", tooltip: "Three colours: accent, background, foreground" },
+    { value: "5", label: "5", tooltip: "Five: those three plus two more, chosen by what each device is for" },
+    { value: "8", label: "8", tooltip: "Eight: the theme's roles in order, by what each device is for" },
     { value: "custom", label: "Custom", tooltip: "Exactly the theme colours you pick, in that order" }
   ]
 
   readonly property string mode: service ? String(service.mode) : "palette"
   readonly property string modeValue: mode === "palette" ? String(service ? service.colors : 5) : mode
   readonly property var variables: service && service.variables ? service.variables : []
-  readonly property var stops: service && service.stops ? service.stops : []
+  readonly property var stops: service && service.deskStops ? service.deskStops : []
+  readonly property var ambientStops: service && service.ambientStops ? service.ambientStops : []
+  readonly property int colors: service ? service.colors : 5
   readonly property var devices: service && service.devices ? service.devices : []
   readonly property var custom: service && service.custom ? service.custom : []
   readonly property int brightness: service ? service.brightness : 100
   readonly property bool openrgbPresent: service ? service.openrgbPresent : false
   readonly property bool syncing: service ? service.syncing : false
 
-  // The variable the swatch row treats as selected in single-select modes.
-  // Unset means the script's default: the background when it has a hue.
-  readonly property string defaultVariable: {
-    for (var i = 0; i < variables.length; i++)
-      if (variables[i].name === "background") return "background"
-    return "accent"
+  // The variable single mode lights: the accent unless one was picked.
+  readonly property string selectedVariable: service && service.single !== "" ? service.single : "accent"
+
+  // The swatch rows. Single and custom: one row, the theme's variables.
+  // 3/5/8: one row per device class, in that class's role order, so the
+  // first ones are what lights.
+  readonly property var swatchGroups: {
+    var byName = {}
+    for (var i = 0; i < variables.length; i++) byName[variables[i].name] = variables[i]
+    if (mode !== "palette")
+      return [{ cls: "", heading: swatchHeading, items: variables }]
+    var groups = []
+    var classes = [{ cls: "desk", heading: "ON THE DESK" }, { cls: "ambient", heading: "AROUND IT" }]
+    for (var c = 0; c < classes.length; c++) {
+      var roles = service ? service.rolesFor(classes[c].cls) : []
+      var items = []
+      for (var r = 0; r < roles.length; r++) if (byName[roles[r]]) items.push(byName[roles[r]])
+      for (var v = 0; v < variables.length; v++) if (roles.indexOf(variables[v].name) === -1) items.push(variables[v])
+      groups.push({ cls: classes[c].cls, heading: classes[c].heading, items: items })
+    }
+    return groups
   }
-  readonly property string selectedVariable: mode === "single"
-    ? (service && service.single !== "" ? service.single : defaultVariable)
-    : (service && service.anchor !== "" ? service.anchor : defaultVariable)
 
   // What is actually lit: a theme may not have five distinct hues to offer.
   // Anything that needs attention takes this line over.
@@ -83,11 +98,11 @@ Panel {
   readonly property string layoutHint: stops.length <= 1
     ? "One colour needs no layout."
     : stops.length + " colours" + (layout === "zones" ? " over the zones of each device." : " in bands, " + (layout === "flow" ? "along each device's LEDs." : (layout === "rows" ? "top to bottom." : "left to right.")))
-  readonly property string swatchHeading: mode === "single" ? "THEME COLOUR" : (mode === "custom" ? "COLOURS TO LIGHT" : "AROUND")
+  readonly property string swatchHeading: mode === "single" ? "THEME COLOUR" : "COLOURS TO LIGHT"
   readonly property string swatchHint: {
     if (mode === "single") return "The variable from colors.toml every device shows."
     if (mode === "custom") return "Any number, lit in the order picked."
-    return "Joined by the theme colours nearest it in hue."
+    return "The first " + colors + " light, in this order; click one to put it first. Keyboard and mouse are the desk; screens, strips and the case are around it."
   }
 
   function lookupService() {
@@ -106,16 +121,24 @@ Panel {
     if (service) service.setLayout(value)
   }
 
-  function chooseVariable(name) {
+  function chooseVariable(cls, name) {
     if (!service) return
     if (mode === "single") service.setSingle(name)
     else if (mode === "custom") service.toggleCustom(name)
-    else service.setAnchor(name)
+    else service.setRolePrimary(cls, name)
   }
 
-  function isSwatchSelected(name) {
-    if (mode === "custom") return custom.indexOf(name) !== -1
-    return name === selectedVariable
+  // The order a swatch lights in, or -1: custom order, or the position in
+  // its class's roles when within the first `colors`.
+  function litOrder(cls, name, index) {
+    if (mode === "custom") return custom.indexOf(name)
+    if (mode === "palette") return index < colors ? index : -1
+    return -1
+  }
+
+  function isSwatchSelected(cls, name, index) {
+    if (mode === "single") return name === selectedVariable
+    return litOrder(cls, name, index) !== -1
   }
 
   function syncNow() {
@@ -148,15 +171,21 @@ Panel {
     return 0
   }
 
+  readonly property var cursorRows: {
+    var rows = ["mode"]
+    for (var i = 0; i < swatchGroups.length; i++) rows.push("swatch" + i)
+    return rows.concat(["layout", "brightness"])
+  }
+
   function rowLength(row) {
     if (row === "mode") return modes.length
-    if (row === "swatch") return variables.length
+    if (row.indexOf("swatch") === 0) { var g = swatchGroups[Number(row.substring(6))]; return g ? g.items.length : 0 }
     if (row === "layout") return layouts.length
     return 1
   }
 
   function moveCursor(dx, dy) {
-    var rows = ["mode", "swatch", "layout", "brightness"]
+    var rows = cursorRows
     var r = rows.indexOf(cursorRow)
     if (dy !== 0) {
       r = Math.max(0, Math.min(rows.length - 1, r + dy))
@@ -175,7 +204,10 @@ Panel {
 
   function activateCursor() {
     if (cursorRow === "mode") chooseMode(modes[cursorIndex].value)
-    else if (cursorRow === "swatch" && variables[cursorIndex]) chooseVariable(variables[cursorIndex].name)
+    else if (cursorRow.indexOf("swatch") === 0) {
+      var g = swatchGroups[Number(cursorRow.substring(6))]
+      if (g && g.items[cursorIndex]) chooseVariable(g.cls, g.items[cursorIndex].name)
+    }
     else if (cursorRow === "layout") chooseLayout(layouts[cursorIndex].value)
   }
 
@@ -252,7 +284,7 @@ Panel {
       onTabRequested: function(direction) { themeRgb.switchPanel(direction) }
       onTextKey: function(text) {
         var key = String(text || "").toLowerCase()
-        if (key >= "1" && key <= "4") themeRgb.chooseMode(themeRgb.modes[Number(key) - 1].value)
+        if (key >= "1" && key <= "5") themeRgb.chooseMode(themeRgb.modes[Number(key) - 1].value)
         else if (key === "r") themeRgb.syncNow()
         else if (key === "m") themeRgb.openMenu()
       }
@@ -393,106 +425,112 @@ Panel {
         }
 
         // Variables -------------------------------------------------------
-        Column {
-          width: parent.width
-          spacing: Style.space(8)
+        Repeater {
+          model: themeRgb.swatchGroups
 
-          PanelSectionHeader {
-            text: themeRgb.swatchHeading
-            foreground: themeRgb.foreground
-            fontFamily: themeRgb.fontFamily
-          }
+          delegate: Column {
+            id: group
+            required property int index
+            required property var modelData
+            width: settings.width
+            spacing: Style.space(8)
 
-          Flow {
-            id: swatchFlow
-            width: parent.width
-            spacing: Style.space(6)
+            PanelSectionHeader {
+              text: group.modelData.heading
+              foreground: themeRgb.foreground
+              fontFamily: themeRgb.fontFamily
+            }
 
-            Repeater {
-              model: themeRgb.variables
+            Flow {
+              width: parent.width
+              spacing: Style.space(6)
 
-              delegate: Item {
-                id: swatch
-                required property int index
-                required property var modelData
+              Repeater {
+                model: group.modelData.items
 
-                readonly property bool selected: themeRgb.isSwatchSelected(modelData.name)
-                readonly property bool hot: themeRgb.cursorActive && themeRgb.cursorRow === "swatch" && themeRgb.cursorIndex === index
-                readonly property int customOrder: themeRgb.custom.indexOf(modelData.name)
+                delegate: Item {
+                  id: swatch
+                  required property int index
+                  required property var modelData
 
-                // Sized to its content, like a chip.
-                width: Style.space(8) + chip.width + Style.space(6) + label.implicitWidth + Style.space(8)
-                height: Style.spacing.controlHeight
+                  readonly property int order: themeRgb.litOrder(group.modelData.cls, modelData.name, index)
+                  readonly property bool selected: themeRgb.isSwatchSelected(group.modelData.cls, modelData.name, index)
+                  readonly property bool hot: themeRgb.cursorActive && themeRgb.cursorRow === "swatch" + group.index && themeRgb.cursorIndex === index
 
-                // Quiet at rest; the shared hover and selected fills otherwise.
-                Rectangle {
-                  anchors.fill: parent
-                  color: swatch.selected
-                    ? Qt.rgba(themeRgb.foreground.r, themeRgb.foreground.g, themeRgb.foreground.b, 0.18)
-                    : (swatch.hot ? Qt.rgba(themeRgb.foreground.r, themeRgb.foreground.g, themeRgb.foreground.b, 0.08) : "transparent")
-                  border.width: swatch.selected ? 1 : 0
-                  border.color: themeRgb.foreground
-                }
+                  // Sized to its content, like a chip.
+                  width: Style.space(8) + chip.width + Style.space(6) + label.implicitWidth + Style.space(8)
+                  height: Style.spacing.controlHeight
 
-                // The colour itself, as the theme defines it.
-                Rectangle {
-                  id: chip
-                  anchors.left: parent.left
-                  anchors.leftMargin: Style.space(8)
-                  anchors.verticalCenter: parent.verticalCenter
-                  width: Style.space(14)
-                  height: Style.space(14)
-                  color: swatch.modelData.hex
-                  border.width: 1
-                  border.color: Qt.rgba(themeRgb.foreground.r, themeRgb.foreground.g, themeRgb.foreground.b, 0.25)
+                  // Quiet at rest; the shared hover and selected fills otherwise.
+                  Rectangle {
+                    anchors.fill: parent
+                    color: swatch.selected
+                      ? Qt.rgba(themeRgb.foreground.r, themeRgb.foreground.g, themeRgb.foreground.b, 0.18)
+                      : (swatch.hot ? Qt.rgba(themeRgb.foreground.r, themeRgb.foreground.g, themeRgb.foreground.b, 0.08) : "transparent")
+                    border.width: swatch.selected ? 1 : 0
+                    border.color: themeRgb.foreground
+                  }
 
-                  // In custom mode the order picked is the order lit.
+                  // The colour itself, as the theme defines it.
+                  Rectangle {
+                    id: chip
+                    anchors.left: parent.left
+                    anchors.leftMargin: Style.space(8)
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Style.space(14)
+                    height: Style.space(14)
+                    color: swatch.modelData.hex
+                    border.width: 1
+                    border.color: Qt.rgba(themeRgb.foreground.r, themeRgb.foreground.g, themeRgb.foreground.b, 0.25)
+
+                    // The order it lights in.
+                    Text {
+                      anchors.centerIn: parent
+                      visible: themeRgb.mode !== "single" && swatch.order !== -1
+                      text: String(swatch.order + 1)
+                      color: Qt.darker(swatch.modelData.hex, 3.0)
+                      font.family: themeRgb.fontFamily
+                      font.pixelSize: Style.font.caption
+                      font.bold: true
+                    }
+                  }
+
                   Text {
-                    anchors.centerIn: parent
-                    visible: themeRgb.mode === "custom" && swatch.customOrder !== -1
-                    text: String(swatch.customOrder + 1)
-                    color: Qt.darker(swatch.modelData.hex, 3.0)
+                    id: label
+                    anchors.left: chip.right
+                    anchors.leftMargin: Style.space(6)
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: swatch.modelData.name
+                    color: themeRgb.foreground
                     font.family: themeRgb.fontFamily
-                    font.pixelSize: Style.font.caption
-                    font.bold: true
+                    font.pixelSize: Style.font.body
+                    font.bold: swatch.selected
                   }
-                }
 
-                Text {
-                  id: label
-                  anchors.left: chip.right
-                  anchors.leftMargin: Style.space(6)
-                  anchors.verticalCenter: parent.verticalCenter
-                  text: swatch.modelData.name
-                  color: themeRgb.foreground
-                  font.family: themeRgb.fontFamily
-                  font.pixelSize: Style.font.body
-                  font.bold: swatch.selected
-                }
-
-                MouseArea {
-                  anchors.fill: parent
-                  hoverEnabled: true
-                  cursorShape: Qt.PointingHandCursor
-                  onEntered: {
-                    themeRgb.cursorActive = true
-                    themeRgb.cursorRow = "swatch"
-                    themeRgb.cursorIndex = swatch.index
+                  MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onEntered: {
+                      themeRgb.cursorActive = true
+                      themeRgb.cursorRow = "swatch" + group.index
+                      themeRgb.cursorIndex = swatch.index
+                    }
+                    onClicked: themeRgb.chooseVariable(group.modelData.cls, swatch.modelData.name)
                   }
-                  onClicked: themeRgb.chooseVariable(swatch.modelData.name)
                 }
               }
             }
           }
+        }
 
-          Text {
-            width: parent.width
-            wrapMode: Text.WordWrap
-            text: themeRgb.variables.length === 0 ? "This theme has no colors.toml." : themeRgb.swatchHint
-            color: themeRgb.dim
-            font.family: themeRgb.fontFamily
-            font.pixelSize: Style.font.caption
-          }
+        Text {
+          width: parent.width
+          wrapMode: Text.WordWrap
+          text: themeRgb.variables.length === 0 ? "This theme has no colors.toml." : themeRgb.swatchHint
+          color: themeRgb.dim
+          font.family: themeRgb.fontFamily
+          font.pixelSize: Style.font.caption
         }
 
         // Layout ----------------------------------------------------------
@@ -574,37 +612,63 @@ Panel {
           }
         }
 
-        // Preview: the stops as bands, the way a strip of LEDs shows them.
-        Rectangle {
-          id: preview
-          width: parent.width
-          height: Style.space(18)
-          color: "transparent"
-          border.width: 1
-          border.color: Qt.rgba(themeRgb.foreground.r, themeRgb.foreground.g, themeRgb.foreground.b, 0.40)
+        // Preview: the stops as bands, the way a strip of LEDs shows them —
+        // one strip per device class when they differ.
+        Repeater {
+          model: themeRgb.mode === "palette"
+            ? [{ label: "Desk", colors: themeRgb.stops }, { label: "Around", colors: themeRgb.ambientStops }]
+            : [{ label: "", colors: themeRgb.stops }]
 
-          Row {
-            id: previewRow
-            anchors.fill: parent
-            anchors.margins: 1
-            Repeater {
-              model: themeRgb.stops
-              delegate: Rectangle {
-                required property var modelData
-                width: Math.floor(previewRow.width / Math.max(1, themeRgb.stops.length))
-                height: previewRow.height
-                color: modelData
+          delegate: Item {
+            id: preview
+            required property var modelData
+            width: settings.width
+            height: Style.space(18)
+
+            Text {
+              id: previewLabel
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+              width: preview.modelData.label === "" ? 0 : Style.space(52)
+              text: preview.modelData.label
+              color: themeRgb.dim
+              font.family: themeRgb.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+
+            Rectangle {
+              anchors.left: previewLabel.right
+              anchors.right: parent.right
+              anchors.top: parent.top
+              anchors.bottom: parent.bottom
+              color: "transparent"
+              border.width: 1
+              border.color: Qt.rgba(themeRgb.foreground.r, themeRgb.foreground.g, themeRgb.foreground.b, 0.40)
+
+              Row {
+                id: previewRow
+                anchors.fill: parent
+                anchors.margins: 1
+                Repeater {
+                  model: preview.modelData.colors
+                  delegate: Rectangle {
+                    required property var modelData
+                    width: Math.floor(previewRow.width / Math.max(1, preview.modelData.colors.length))
+                    height: previewRow.height
+                    color: modelData
+                  }
+                }
+              }
+
+              Text {
+                anchors.centerIn: parent
+                visible: preview.modelData.colors.length === 0
+                text: "No colour for this theme"
+                color: themeRgb.dim
+                font.family: themeRgb.fontFamily
+                font.pixelSize: Style.font.caption
               }
             }
-          }
-
-          Text {
-            anchors.centerIn: parent
-            visible: themeRgb.stops.length === 0
-            text: "No colour for this theme"
-            color: themeRgb.dim
-            font.family: themeRgb.fontFamily
-            font.pixelSize: Style.font.caption
           }
         }
 

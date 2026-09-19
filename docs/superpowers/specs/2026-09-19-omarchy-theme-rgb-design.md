@@ -150,3 +150,28 @@ Enter selects, `1`–`5` pick a mode, `r` syncs.
   the latest payload wins) and the stops probe re-runs after finishing rather
   than being killed mid-way, so rapid switching between modes cannot leave the
   file, the preview and the hardware disagreeing.
+
+## Revision 5 — roles by device class, no hue maths
+
+Which theme colours light is decided by what the theme's roles are and what
+each device is for, not by computing hues.
+
+- Single: the accent, unless a variable was picked. keyboard.rgb is no longer
+  consulted.
+- 3: accent, background, foreground on every device.
+- 5 and 8: the class's role list, first N. Desk (Keyboard, Mouse, Mousemat,
+  Headset, HeadsetStand, Gamepad): `accent background foreground blue yellow
+  red green magenta cyan orange brown`. Ambient (everything else — screen,
+  strips, DRAM, motherboard, case): `accent background foreground blue
+  magenta cyan red green yellow orange brown`. Variables the theme lacks and
+  repeated hexes are skipped. `roles.desk` / `roles.ambient` in
+  theme-rgb.json override the order; the panel's swatches for 3/5/8 are two
+  rows in class order, and a click puts a variable first for that class.
+- `stops` prints `desk a,b,c` and `ambient a,b,c`; the panel previews both.
+- LED gamma: each channel goes through (c/max)^2.2 and the brightest channel
+  lights fully, so colours keep the hue and saturation seen on screen and a
+  dark background lights as its hue at full strength. Brightness scales the
+  result.
+- Several colours are always written in Direct mode (static keeps one colour
+  and drops the rest); openrgb's output goes to last-apply.log, a non-zero
+  exit is reported and retried once.

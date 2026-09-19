@@ -29,18 +29,21 @@ Remove it with `omarchy plugin remove huacnlee.theme_rgb`.
 
 Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
 
-- **Colours** — `Single`, `3`, `5` or `Custom`.
-  - *Single* lights one theme variable on every device.
-  - *3 / 5* light the chosen variable plus the theme colours nearest to it
-    on the hue wheel (within 90°), so a blue theme gets blues, cyans and purples — never a
-    rainbow. Greys and near-duplicate hues are skipped, so a theme may offer
-    fewer than asked.
+- **Colours** — `Single`, `3`, `5`, `8` or `Custom`.
+  - *Single* lights one theme variable on every device: the accent unless
+    you pick another.
+  - *3* lights accent, background and foreground everywhere.
+  - *5* and *8* carry on with the theme's other roles in an order that
+    suits what each device is for: on the desk (keyboard, mouse, headset,
+    pad) `blue, yellow, red, green, magenta…`; around it (screen, strips,
+    RAM, motherboard, case) `blue, magenta, cyan, red, green…`. Click a
+    swatch to put it first for that class. Variables the theme lacks, and
+    repeated colours, are skipped.
   - *Custom* lights exactly the variables you pick, in the order you pick them.
 - **Theme colour** — swatches of the current theme's `accent background red
   orange yellow green cyan blue magenta brown foreground`, as `colors.toml`
-  defines them. Until you choose, the background is used: the wallpaper and
-  window backgrounds are what a theme looks like. Dark tones are lit at full
-  strength, so a navy background lights as that blue.
+  defines them. Dark tones such as a navy background are lit at full
+  strength, so they read as that hue rather than a dim glow.
 - **Layout** — where several colours go. *Flow* lays bands along each
   device's LEDs (top to bottom on most keyboards). On keyboards, *Rows* and
   *Columns* place the bands by where each key actually sits, and *Zones*
@@ -49,7 +52,7 @@ Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
   (a mouse's logo, wheel and strip, say) in turn.
 - **Brightness** — 10–100 %. Applied to the colour values themselves, so it
   works the same in every OpenRGB mode.
-- **Preview** — the exact colours the LEDs get, as bands.
+- **Preview** — the exact colours the LEDs get, as bands; one strip per device class when they differ.
 - **Devices** — what OpenRGB found on the last sync, with LED counts.
 
 **Menu** — the `󰇘` button in the header lists *Sync now* and *GitHub*.
@@ -71,12 +74,15 @@ editing it by hand applies too:
 {
   "mode": "palette",
   "single": "",
-  "anchor": "",
   "colors": 5,
   "custom": [],
   "brightness": 100,
-  "layout": "flow"
+  "layout": "flow",
+  "roles": { "desk": [], "ambient": [] }
 }
+
+Empty `roles` mean the defaults above; a list there is the full order for
+that class.
 ```
 
 ## Speed

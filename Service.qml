@@ -21,8 +21,14 @@ Item {
 
   // What theme-rgb.json says, with the script's defaults.
   property string mode: "palette"        // "single" | "palette" | "custom"
-  property string single: ""             // "" = the script's default (background, else accent)
-  property string anchor: ""             // "" = the same default
+  property string single: ""             // "" = accent
+  // Role order per device class for 3/5/8 colours; empty = the script's
+  // defaults below. The desk (keyboard, mouse, …) is the working surface,
+  // everything else is ambient.
+  property var deskRoles: []
+  property var ambientRoles: []
+  readonly property var defaultDeskRoles: ["accent", "background", "foreground", "blue", "yellow", "red", "green", "magenta", "cyan", "orange", "brown"]
+  readonly property var defaultAmbientRoles: ["accent", "background", "foreground", "blue", "magenta", "cyan", "red", "green", "yellow", "orange", "brown"]
   property int colors: 5
   property var custom: []
   property int brightness: 100
@@ -30,8 +36,12 @@ Item {
 
   // [{ name, hex }] the current theme defines, for the swatches.
   property var variables: []
-  // "#rrggbb" colours the script will light, for the preview.
-  property var stops: []
+  // "#rrggbb" colours the script will light, per device class, for the
+  // preview. `stops` is the desk list, which is also what a device of an
+  // unknown type gets.
+  property var deskStops: []
+  property var ambientStops: []
+  readonly property var stops: deskStops
   // [{ id, name, leds, type }] found on the last apply, desk peripherals first.
   property var devices: []
 
@@ -62,9 +72,11 @@ Item {
     if (!parsed || typeof parsed !== "object") parsed = {}
     mode = parsed.mode === "single" || parsed.mode === "custom" ? parsed.mode : "palette"
     single = typeof parsed.single === "string" ? parsed.single : ""
-    anchor = typeof parsed.anchor === "string" ? parsed.anchor : ""
+    var roles = parsed.roles && typeof parsed.roles === "object" ? parsed.roles : {}
+    deskRoles = Array.isArray(roles.desk) ? roles.desk.map(function(v) { return String(v) }) : []
+    ambientRoles = Array.isArray(roles.ambient) ? roles.ambient.map(function(v) { return String(v) }) : []
     var n = Number(parsed.colors)
-    colors = n === 3 ? 3 : 5
+    colors = n === 3 || n === 8 ? n : 5
     custom = Array.isArray(parsed.custom) ? parsed.custom.map(function(v) { return String(v) }) : []
     var b = Number(parsed.brightness)
     brightness = isFinite(b) && b >= 10 && b <= 100 ? Math.round(b) : 100
@@ -75,11 +87,23 @@ Item {
   // The panel's setters. Each writes the whole file, then re-syncs.
   function setMode(value) { if (value === "single" || value === "palette" || value === "custom") { mode = value; save() } }
   function setSingle(name) { single = name; save() }
-  function setAnchor(name) { anchor = name; save() }
-  function setColors(n) { if (n === 3 || n === 5) { colors = n; save() } }
+  function setColors(n) { if (n === 3 || n === 5 || n === 8) { colors = n; save() } }
   // One save for "palette with n colours", so the file never holds a half
   // state between two writes.
-  function setPalette(n) { if (n === 3 || n === 5) { colors = n; mode = "palette"; save() } }
+  function setPalette(n) { if (n === 3 || n === 5 || n === 8) { colors = n; mode = "palette"; save() } }
+
+  function rolesFor(cls) {
+    if (cls === "ambient") return ambientRoles.length > 0 ? ambientRoles : defaultAmbientRoles
+    return deskRoles.length > 0 ? deskRoles : defaultDeskRoles
+  }
+
+  // Make `name` the first role of a class; the rest keep their order.
+  function setRolePrimary(cls, name) {
+    var next = [String(name)].concat(rolesFor(cls).filter(function(v) { return v !== name }))
+    if (cls === "ambient") ambientRoles = next
+    else deskRoles = next
+    save()
+  }
   function setLayout(value) {
     if (value === "flow" || value === "rows" || value === "columns" || value === "zones") { layout = value; save() }
   }
@@ -114,11 +138,11 @@ Item {
     var payload = {
       mode: mode,
       single: single,
-      anchor: anchor,
       colors: colors,
       custom: custom,
       brightness: brightness,
-      layout: layout
+      layout: layout,
+      roles: { desk: deskRoles, ambient: ambientRoles }
     }
     saveProcess.command = ["bash", "-c",
       'mkdir -p "$(dirname "$1")" && printf "%s\\n" "$2" > "$1"', "_",
@@ -369,14 +393,18 @@ Item {
     command: ["bash", root.applyScript, "stops"]
     stdout: StdioCollector {
       waitForEnd: true
+      // "desk a,b,c" and "ambient a,b,c".
       onStreamFinished: {
         var lines = String(text || "").trim().split("\n")
-        var next = []
+        var found = { desk: [], ambient: [] }
         for (var i = 0; i < lines.length; i++) {
-          var hex = lines[i].trim()
-          if (/^[0-9a-fA-F]{6}$/.test(hex)) next.push("#" + hex.toLowerCase())
+          var parts = lines[i].trim().split(/\s+/)
+          if (parts.length !== 2 || !(parts[0] in found)) continue
+          found[parts[0]] = parts[1].split(",").filter(function(h) { return /^[0-9a-fA-F]{6}$/.test(h) })
+            .map(function(h) { return "#" + h.toLowerCase() })
         }
-        root.stops = next
+        root.deskStops = found.desk
+        root.ambientStops = found.ambient
       }
     }
     onExited: function() {
