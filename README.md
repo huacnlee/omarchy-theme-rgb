@@ -27,10 +27,10 @@ Remove it with `omarchy plugin remove huacnlee.theme_rgb`.
 
 Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
 
-- **Colours** — `Single`, `2`, `3`, `5` or `Custom`.
+- **Colours** — `Single`, `3`, `5` or `Custom`.
   - *Single* lights one theme variable on every device.
-  - *2 / 3 / 5* light the chosen variable plus the theme colours nearest to it
-    on the hue wheel, so a blue theme gets blues, cyans and purples — never a
+  - *3 / 5* light the chosen variable plus the theme colours nearest to it
+    on the hue wheel (within 90°), so a blue theme gets blues, cyans and purples — never a
     rainbow. Greys and near-duplicate hues are skipped, so a theme may offer
     fewer than asked.
   - *Custom* lights exactly the variables you pick, in the order you pick them.
@@ -43,7 +43,7 @@ Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
 
 Several colours are laid out as contiguous bands across a device's LEDs, with
 hard edges between them. Keyboard: `←`/`→` move within a row, `↑`/`↓` between
-rows, `Enter` picks, `1`–`5` pick a colours mode, `r` syncs now, `Esc` closes.
+rows, `Enter` picks, `1`–`4` pick a colours mode, `r` syncs now, `Esc` closes.
 
 Settings live in `~/.config/omarchy/theme-rgb.json`; the file is watched, so
 editing it by hand applies too:

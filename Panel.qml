@@ -28,9 +28,8 @@ Panel {
 
   readonly property var modes: [
     { value: "single", label: "Single", tooltip: "One theme colour on every device" },
-    { value: "2", label: "2", tooltip: "Two colours: the chosen one plus its nearest theme colour" },
-    { value: "3", label: "3", tooltip: "Three colours: the chosen one plus the two nearest" },
-    { value: "5", label: "5", tooltip: "Five colours: the chosen one plus the four nearest" },
+    { value: "3", label: "3", tooltip: "Three colours: the chosen one plus the two nearest theme hues" },
+    { value: "5", label: "5", tooltip: "Up to five: the chosen one plus the nearest theme hues within 90°" },
     { value: "custom", label: "Custom", tooltip: "Exactly the theme colours you pick, in that order" }
   ]
 
@@ -64,8 +63,8 @@ Panel {
   readonly property string swatchHeading: mode === "single" ? "THEME COLOUR" : (mode === "custom" ? "COLOURS TO LIGHT" : "AROUND")
   readonly property string swatchHint: {
     if (mode === "single") return "The variable from colors.toml every device shows."
-    if (mode === "custom") return "Pick any number; they light in the order picked, in clean bands."
-    return "The theme colours nearest this one join it, in clean bands."
+    if (mode === "custom") return "Any number, lit in the order picked."
+    return "Joined by the theme colours nearest it in hue."
   }
 
   function lookupService() {
@@ -201,7 +200,7 @@ Panel {
       onTabRequested: function(direction) { themeRgb.switchPanel(direction) }
       onTextKey: function(text) {
         var key = String(text || "").toLowerCase()
-        if (key >= "1" && key <= "5") themeRgb.chooseMode(themeRgb.modes[Number(key) - 1].value)
+        if (key >= "1" && key <= "4") themeRgb.chooseMode(themeRgb.modes[Number(key) - 1].value)
         else if (key === "r") themeRgb.syncNow()
       }
 
@@ -295,9 +294,9 @@ Panel {
           Grid {
             id: swatchGrid
             width: parent.width
-            columns: 3
+            columns: 5
             columnSpacing: Style.space(6)
-            rowSpacing: Style.space(4)
+            rowSpacing: Style.space(6)
 
             readonly property real cellWidth: Math.floor((width - columnSpacing * (columns - 1)) / columns)
 
@@ -314,7 +313,7 @@ Panel {
                 readonly property int customOrder: themeRgb.custom.indexOf(modelData.name)
 
                 width: swatchGrid.cellWidth
-                height: Style.spacing.controlHeight
+                height: chip.height + label.implicitHeight + Style.space(14)
 
                 // Quiet at rest; the shared hover and selected fills otherwise.
                 Rectangle {
@@ -329,11 +328,11 @@ Panel {
                 // The colour itself, as the theme defines it.
                 Rectangle {
                   id: chip
-                  anchors.left: parent.left
-                  anchors.leftMargin: Style.space(6)
-                  anchors.verticalCenter: parent.verticalCenter
-                  width: Style.space(14)
-                  height: Style.space(14)
+                  anchors.top: parent.top
+                  anchors.topMargin: Style.space(6)
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  width: Style.space(22)
+                  height: Style.space(22)
                   color: swatch.modelData.hex
                   border.width: 1
                   border.color: Qt.rgba(themeRgb.foreground.r, themeRgb.foreground.g, themeRgb.foreground.b, 0.25)
@@ -352,16 +351,16 @@ Panel {
 
                 Text {
                   id: label
-                  anchors.left: chip.right
-                  anchors.leftMargin: Style.space(6)
-                  anchors.right: parent.right
-                  anchors.rightMargin: Style.space(4)
-                  anchors.verticalCenter: parent.verticalCenter
+                  anchors.top: chip.bottom
+                  anchors.topMargin: Style.space(4)
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  width: parent.width - Style.space(4)
+                  horizontalAlignment: Text.AlignHCenter
                   text: swatch.modelData.name
                   elide: Text.ElideRight
-                  color: themeRgb.foreground
+                  color: swatch.selected ? themeRgb.foreground : themeRgb.dim
                   font.family: themeRgb.fontFamily
-                  font.pixelSize: Style.font.body
+                  font.pixelSize: Style.font.caption
                   font.bold: swatch.selected
                 }
 

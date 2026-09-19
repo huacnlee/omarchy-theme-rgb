@@ -43,7 +43,7 @@ if [[ -f $CONFIG ]] && command -v jq >/dev/null 2>&1; then
   [[ $mode == single || $mode == palette || $mode == custom ]] && MODE=$mode
   is_variable "$single" && SINGLE=$single
   is_variable "$anchor" && ANCHOR=$anchor
-  [[ $colors == 2 || $colors == 3 || $colors == 5 ]] && COLORS=$colors
+  [[ $colors == 3 || $colors == 5 ]] && COLORS=$colors
   CUSTOM=$custom
   if [[ $brightness =~ ^[0-9]+$ ]] && (( brightness >= 1 && brightness <= 100 )); then
     BRIGHTNESS=$brightness
@@ -72,10 +72,12 @@ variable_color() {
   theme_variables | awk -v name="$1" '$1 == name { print $2; exit }'
 }
 
-# Theme colours nearest the anchor on the hue wheel, so the light reads as
-# this theme rather than as a rainbow. Prints raw hex, one per line, ordered
-# by hue around the anchor. Prints nothing when the theme cannot support it
-# (grey anchor, too few distinct colours).
+# Theme colours nearest the anchor on the hue wheel, and never more than 90
+# degrees from it, so the light reads as this theme rather than as a rainbow:
+# a theme short of nearby hues lights fewer colours rather than its opposite
+# ones. Prints raw hex, one per line, ordered by hue around the anchor.
+# Prints nothing when the theme cannot support it (grey anchor, nothing else
+# saturated nearby).
 palette_colors() {
   theme_variables | awk -v want="$COLORS" -v anchor="$ANCHOR" '
     function hex_value(char) {
@@ -116,16 +118,17 @@ palette_colors() {
       anchor_hue = hue
 
       # Candidates: the anchor first, then the rest in theme order, dropping
-      # greys and anything within 10 degrees of a colour already taken.
+      # greys, exact duplicates and anything more than 90 degrees away.
       n = 1; hexes[1] = value[anchor]; hues[1] = anchor_hue; gaps[1] = 0
       for (i = 1; i <= total; i++) {
         if (names[i] == anchor) continue
         hex = value[names[i]]
         analyse(hex)
         if (sat < 0.15) continue
+        if (hue_gap(hue, anchor_hue) > 90) continue
         dup = 0
         for (j = 1; j <= n; j++)
-          if (hexes[j] == hex || hue_gap(hues[j], hue) < 10) { dup = 1; break }
+          if (hexes[j] == hex) { dup = 1; break }
         if (dup) continue
         n++; hexes[n] = hex; hues[n] = hue; gaps[n] = hue_gap(hue, anchor_hue)
       }

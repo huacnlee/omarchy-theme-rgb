@@ -172,14 +172,6 @@ brown = "#8000ff"
 bright_red = "#ff0000"
 TOML
 
-# --- 2 colours: accent plus its nearest theme hue --------------------------
-set_config '{"mode": "palette", "colors": 2}'
-if [[ $(stops | paste -sd,) == 0000ff,8000ff ]]; then
-  pass "2 colours: accent plus its nearest theme hue"
-else
-  fail "2 colours: accent plus its nearest theme hue" "$(stops | paste -sd,)"
-fi
-
 # --- 3 colours: ordered by hue so the gradient flows through the accent ---
 set_config '{"mode": "palette", "colors": 3}'
 if [[ $(stops | paste -sd,) == 00ffff,0000ff,8000ff ]]; then
@@ -188,24 +180,24 @@ else
   fail "3 colours: ordered by hue so the gradient flows through the accent" "$(stops | paste -sd,)"
 fi
 
-# --- 5 colours: nearest hues win, the opposite hue never appears ----------
+# --- 5 colours: only hues within 90 degrees join, so four here -------------
 set_config '{"mode": "palette", "colors": 5}'
-if [[ $(stops | paste -sd,) == 00ffff,0000ff,8000ff,ff00ff,ff0000 ]]; then
-  pass "5 colours: nearest hues win, the opposite hue never appears"
+if [[ $(stops | paste -sd,) == 00ffff,0000ff,8000ff,ff00ff ]]; then
+  pass "5 colours: only hues within 90 degrees join, so four here"
 else
-  fail "5 colours: nearest hues win, the opposite hue never appears" "$(stops | paste -sd,)"
+  fail "5 colours: only hues within 90 degrees join, so four here" "$(stops | paste -sd,)"
 fi
 
 # --- missing config defaults to 5 palette colours -------------------------
 rm "$home/.config/omarchy/theme-rgb.json"
-if [[ $(stops | paste -sd,) == 00ffff,0000ff,8000ff,ff00ff,ff0000 ]]; then
+if [[ $(stops | paste -sd,) == 00ffff,0000ff,8000ff,ff00ff ]]; then
   pass "missing config defaults to 5 palette colours"
 else
   fail "missing config defaults to 5 palette colours" "$(stops | paste -sd,)"
 fi
-
+# --- several colours fill each device's LEDs in clean bands ---------------
 # --- palette colours are interpolated across each device's LEDs ----------
-set_config '{"mode": "palette", "colors": 2}'
+set_config '{"mode": "custom", "custom": ["accent", "brown"]}'
 OPENRGB_LIST_DEVICES='0: Fake Strip
   Modes: Direct Static
   LEDs: '"'"'LED 1'"'"' '"'"'LED 2'"'"' '"'"'LED 3'"'"'
@@ -240,6 +232,15 @@ if [[ $(stops | paste -sd,) == cacccc ]]; then
   pass "a grey accent has no hue to follow, so single wins"
 else
   fail "a grey accent has no hue to follow, so single wins" "$(stops | paste -sd,)"
+fi
+
+# --- close hues are distinct colours, only identical hex is a duplicate ---
+printf 'accent = "#0000ff"\nblue = "#0000ff"\nbrown = "#1010ff"\ncyan = "#00ffff"\n' >"$theme/colors.toml"
+set_config '{"mode": "palette", "colors": 3}'
+if [[ $(stops | paste -sd,) == 00ffff,0000ff,1010ff ]]; then
+  pass "close hues are distinct colours, only identical hex is a duplicate"
+else
+  fail "close hues are distinct colours, only identical hex is a duplicate" "$(stops | paste -sd,)"
 fi
 
 # ==========================================================================
@@ -295,8 +296,8 @@ fi
 rm "$theme/keyboard.rgb"
 
 # --- palette tiers revolve around the chosen anchor -----------------------
-set_config '{"mode": "palette", "colors": 2, "anchor": "red"}'
-if [[ $(stops | paste -sd,) == ff0000,ff8000 ]]; then
+set_config '{"mode": "palette", "colors": 3, "anchor": "red"}'
+if [[ $(stops | paste -sd,) == ff0000,ff8000,ffff00 ]]; then
   pass "palette tiers revolve around the chosen anchor"
 else
   fail "palette tiers revolve around the chosen anchor" "$(stops | paste -sd,)"

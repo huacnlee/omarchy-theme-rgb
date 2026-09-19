@@ -64,7 +64,7 @@ Item {
     single = typeof parsed.single === "string" ? parsed.single : ""
     anchor = typeof parsed.anchor === "string" && parsed.anchor !== "" ? parsed.anchor : "accent"
     var n = Number(parsed.colors)
-    colors = n === 2 || n === 3 ? n : 5
+    colors = n === 3 ? 3 : 5
     custom = Array.isArray(parsed.custom) ? parsed.custom.map(function(v) { return String(v) }) : []
     var b = Number(parsed.brightness)
     brightness = isFinite(b) && b >= 10 && b <= 100 ? Math.round(b) : 100
@@ -74,7 +74,7 @@ Item {
   function setMode(value) { if (value === "single" || value === "palette" || value === "custom") { mode = value; save() } }
   function setSingle(name) { single = name; save() }
   function setAnchor(name) { anchor = name; save() }
-  function setColors(n) { if (n === 2 || n === 3 || n === 5) { colors = n; save() } }
+  function setColors(n) { if (n === 3 || n === 5) { colors = n; save() } }
   function toggleCustom(name) {
     var next = custom.filter(function(v) { return v !== name })
     if (next.length === custom.length) next.push(name)
