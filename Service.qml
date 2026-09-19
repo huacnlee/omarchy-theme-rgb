@@ -46,6 +46,8 @@ Item {
   property var devices: []
 
   property bool openrgbPresent: false
+  // Set by the window (App.qml) so the bar widget can mark it open.
+  property bool windowOpen: false
   property bool serverRunning: false
   // True once an SDK server answers on its port (ours or the user's), or once
   // we have given up waiting. Until then applies queue: a direct probe while
@@ -92,9 +94,13 @@ Item {
   // state between two writes.
   function setPalette(n) { if (n === 3 || n === 5 || n === 8) { colors = n; mode = "palette"; save() } }
 
+  // The accent belongs to one and three colours only; with five or eight
+  // the named colours light, so it drops out of the order shown and used.
   function rolesFor(cls) {
-    if (cls === "ambient") return ambientRoles.length > 0 ? ambientRoles : defaultAmbientRoles
-    return deskRoles.length > 0 ? deskRoles : defaultDeskRoles
+    var list = cls === "ambient"
+      ? (ambientRoles.length > 0 ? ambientRoles : defaultAmbientRoles)
+      : (deskRoles.length > 0 ? deskRoles : defaultDeskRoles)
+    return colors > 3 ? list.filter(function(v) { return v !== "accent" }) : list
   }
 
   // Make `name` the first role of a class; the rest keep their order.

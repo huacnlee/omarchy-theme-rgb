@@ -208,11 +208,14 @@ variable_color() {
 
 # The first `count` usable colours from a role list: variables the theme
 # lacks are skipped, as is a colour already taken (many themes reuse one hex
-# for accent and a named colour). Raw hex, one per line.
+# for accent and a named colour). The accent belongs to one and three
+# colours only; five and eight are the theme's named colours. Raw hex, one
+# per line.
 role_colors() {
   local roles="$1" count="$2" name hex taken=" " n=0
   for name in $roles; do
     is_variable "$name" || continue
+    [[ $name == accent ]] && (( count > 3 )) && continue
     hex=$(variable_color "$name")
     [[ -n $hex && $taken != *" $hex "* ]] || continue
     echo "$hex"

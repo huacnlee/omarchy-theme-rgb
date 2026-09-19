@@ -16,7 +16,7 @@ test:
 QMLROOT := $(or $(TMPDIR),/tmp)/omarchy-theme-rgb-qmlroot
 qml-check:
 	mkdir -p $(QMLROOT) && ln -sfn /usr/share/omarchy/shell $(QMLROOT)/qs
-	$(QMLLINT) -I $(QMLROOT) -I /usr/share/omarchy/shell --signal-handler-parameters disable Service.qml Panel.qml components/PanelMenu.qml
+	$(QMLLINT) -I $(QMLROOT) -I /usr/share/omarchy/shell --signal-handler-parameters disable Service.qml Panel.qml App.qml components/PanelMenu.qml
 
 validate: test qml-check
 	omarchy plugin validate .

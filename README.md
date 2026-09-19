@@ -25,21 +25,24 @@ in the bar. It syncs once when the shell starts and again every time
 
 Remove it with `omarchy plugin remove huacnlee.theme_rgb`.
 
-## The panel
+## The window
 
-Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
+Click the palette glyph in the bar (or run `omarchy-shell shell toggle
+huacnlee.theme_rgb`); middle-click syncs without opening anything. Settings
+sit on the left, the devices OpenRGB found on the right.
 
 - **Colours** — `1`, `3`, `Default` (five), `8` or `Custom`.
   - *1* lights one theme variable on every device: the accent unless you
     pick another.
-  - *3*, *Default* (five) and *8* take the theme's roles in an order that
-    suits what each device is for: on the desk (keyboard, mouse, headset,
-    pad) `accent, blue, yellow, red, green, magenta, cyan…`; around it
-    (screen, strips, RAM, motherboard, case) `accent, blue, magenta, cyan,
-    red, green, yellow…`. Background and foreground are left out on purpose
-    — near black and near white make dark or colourless bands — but stay
-    available to pick by hand. Click a swatch to put it first for that
-    class. Variables the theme lacks, and repeated colours, are skipped.
+  - *3* lights the accent and two named colours; *Default* (five) and *8*
+    light the theme's named colours only, in an order that suits what each
+    device is for: on the desk (keyboard, mouse, headset, pad) `blue, yellow,
+    red, green, magenta, cyan…`; around it (screen, strips, RAM, motherboard,
+    case) `blue, magenta, cyan, red, green, yellow…`. Background and
+    foreground are left out on purpose — near black and near white make dark
+    or colourless bands — but stay available to pick by hand. Click a swatch
+    to put it first for that class. Variables the theme lacks, and repeated
+    colours, are skipped.
   - *Custom* lights exactly the variables you pick, in the order you pick them.
 - **Theme colour** — swatches of the current theme's `accent background red
   orange yellow green cyan blue magenta brown foreground`, as `colors.toml`
@@ -59,9 +62,9 @@ Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
 
 **Menu** — the `󰇘` button in the header lists *Sync now* and *GitHub*.
 
-**Without OpenRGB** the panel shows a welcome page instead of the settings,
+**Without OpenRGB** the window shows a welcome page instead of the settings,
 with an *Install OpenRGB* button: it opens a floating terminal running
-`omarchy-pkg-add openrgb`, and the panel switches to the settings by itself
+`omarchy-pkg-add openrgb`, and the window switches to the settings by itself
 once the package is in place.
 
 Several colours always sit in contiguous bands with hard edges between them,

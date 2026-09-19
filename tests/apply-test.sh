@@ -167,25 +167,25 @@ else
   fail "3 colours: accent, blue, then yellow on the desk, magenta around it" "$(stops) / $(stops ambient)"
 fi
 
-# --- 5 colours add red and green on the desk, cyan and red around it ------
+# --- 5 colours are the named colours, no accent: desk and ambient orders --
 set_config '{"mode": "palette", "colors": 5}'
-if [[ $(stops) == 0000ff,0080ff,ffff00,ff0000,00ff00 && $(stops ambient) == 0000ff,0080ff,ff00ff,00ffff,ff0000 ]]; then
-  pass "5 colours add red and green on the desk, cyan and red around it"
+if [[ $(stops) == 0080ff,ffff00,ff0000,00ff00,ff00ff && $(stops ambient) == 0080ff,ff00ff,00ffff,ff0000,00ff00 ]]; then
+  pass "5 colours are the named colours, no accent: desk and ambient orders"
 else
-  fail "5 colours add red and green on the desk, cyan and red around it" "$(stops) / $(stops ambient)"
+  fail "5 colours are the named colours, no accent: desk and ambient orders" "$(stops) / $(stops ambient)"
 fi
 
-# --- 8 colours carry on with magenta, cyan, orange on the desk; green, yellow, orange around it
+# --- 8 colours carry on: cyan, orange, brown on the desk; yellow, orange, brown around it
 set_config '{"mode": "palette", "colors": 8}'
-if [[ $(stops) == 0000ff,0080ff,ffff00,ff0000,00ff00,ff00ff,00ffff,ff8000 && $(stops ambient) == 0000ff,0080ff,ff00ff,00ffff,ff0000,00ff00,ffff00,ff8000 ]]; then
-  pass "8 colours carry on with magenta, cyan, orange on the desk; green, yellow, orange around it"
+if [[ $(stops) == 0080ff,ffff00,ff0000,00ff00,ff00ff,00ffff,ff8000,8000ff && $(stops ambient) == 0080ff,ff00ff,00ffff,ff0000,00ff00,ffff00,ff8000,8000ff ]]; then
+  pass "8 colours carry on: cyan, orange, brown on the desk; yellow, orange, brown around it"
 else
-  fail "8 colours carry on with magenta, cyan, orange on the desk; green, yellow, orange around it" "$(stops) / $(stops ambient)"
+  fail "8 colours carry on: cyan, orange, brown on the desk; yellow, orange, brown around it" "$(stops) / $(stops ambient)"
 fi
 
 # --- missing config means 5 colours ---------------------------------------
 rm "$home/.config/omarchy/theme-rgb.json"
-if [[ $(stops) == 0000ff,0080ff,ffff00,ff0000,00ff00 ]]; then
+if [[ $(stops) == 0080ff,ffff00,ff0000,00ff00,ff00ff ]]; then
   pass "missing config means 5 colours"
 else
   fail "missing config means 5 colours" "$(stops)"
@@ -236,7 +236,7 @@ OPENRGB_LIST_DEVICES='0: ENE DRAM
   Type:           Keyboard
   Modes: [Direct] Static
   LEDs: a b c d e ' run_apply
-if called 'openrgb -d 0 -m direct -c 0000ff,0000ff,00ff00,ff00ff,ffff00 -d 1 -m direct -c 0000ff,0000ff,00ff00,ffff00,ff00ff'; then
+if called 'openrgb -d 0 -m direct -c 00ff00,00ff00,ff00ff,ff00ff,ffff00 -d 1 -m direct -c 00ff00,00ff00,ffff00,ffff00,ff00ff'; then
   pass "each device gets its own class's colours in the one call"
 else
   fail "each device gets its own class's colours in the one call" "$(cat "$calls")"
@@ -244,7 +244,7 @@ fi
 
 # --- failed detection broadcasts the desk colours -------------------------
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" OPENRGB_LIST_FAIL=1 run_apply
-if called 'openrgb -c 0000ff,00ff00,ffff00,ff00ff'; then
+if called 'openrgb -c 00ff00,ffff00,ff00ff'; then
   pass "failed detection broadcasts the desk colours"
 else
   fail "failed detection broadcasts the desk colours" "$(cat "$calls")"

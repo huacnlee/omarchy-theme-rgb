@@ -9,15 +9,17 @@
   "description": "Your theme, on every light. Keeps every device OpenRGB manages \u2014 keyboard, mouse, RAM, fans, strips \u2014 in the colours of the current Omarchy theme, on theme switch and at login. Pick one theme colour or a set of them from the bar, and how they lie across a keyboard.",
   "kinds": [
     "service",
-    "bar-widget"
+    "bar-widget",
+    "panel"
   ],
   "entryPoints": {
     "service": "Service.qml",
-    "barWidget": "Panel.qml"
+    "barWidget": "Panel.qml",
+    "panel": "App.qml"
   },
   "barWidget": {
     "displayName": "Theme RGB",
-    "description": "Palette glyph in the bar; click to pick which theme colours light your devices, how they are laid out on a keyboard, and how bright.",
+    "description": "Palette glyph in the bar; click to open the Theme RGB window and pick which theme colours light your devices, how they lie on a keyboard, and how bright.",
     "category": "System",
     "aliases": [
       "openrgb",
