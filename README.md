@@ -10,6 +10,8 @@ keyboard, mouse, RAM, fans and strips follow; log in and they already match.
 A bar panel picks how many theme colours, how they lie on a keyboard, and how
 bright.
 
+<img width="5712" height="4284" alt="IMG_0326" src="https://github.com/user-attachments/assets/19a1bc10-ec63-46af-b1e4-a2d52f30ac28" />
+
 Omarchy retints ASUS ROG and Framework keyboards itself. This plugin does the
 same for everything OpenRGB can see, along the lines of
 [omacom/omarchy#12199](https://github.com/omacom/omarchy/pull/12199), packaged
