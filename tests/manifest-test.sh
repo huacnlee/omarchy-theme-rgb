@@ -32,7 +32,7 @@ grep -q 'omarchy/theme-rgb.json' Service.qml || fail "Service.qml must watch the
 grep -q '"stops"' Service.qml || fail "Service.qml must preview via the stops subcommand"
 grep -q '"variables"' Service.qml || fail "Service.qml must read the theme variables from the script"
 grep -q 'theme-rgb/devices' Service.qml || fail "Service.qml must read the device list the script records"
-for fn in setMode setSingle setColors setPalette setRolePrimary toggleCustom setBrightness setLayout; do
+for fn in setMode setSingle setColors setPalette toggleCustom setBrightness setLayout; do
   grep -q "function $fn" Service.qml || fail "Service.qml must expose $fn"
 done
 # Without a server every openrgb call re-probes the hardware for seconds; the

@@ -154,76 +154,79 @@ else
 fi
 
 # ==========================================================================
-# three and five colours: the theme's roles, by what each device is for
+# three, five and eight colours: the theme's own, ordered for contrast
 # ==========================================================================
+# Pure hues: accent 240°, red 0, orange 30, yellow 60, green 120, cyan 180,
+# blue 210, magenta 300, brown 270. Accent first, then always the hue
+# farthest from the previous: yellow, blue, orange, cyan, red, green,
+# magenta, brown. Ambient starts one later.
 
-# --- 3 colours: accent, blue, then yellow on the desk, magenta around it --
-# Never background or foreground: near black and near white make dark or
-# colourless bands.
+# --- 3 colours: the accent, then the two most contrasting -----------------
 set_config '{"mode": "palette", "colors": 3}'
-if [[ $(stops) == 0000ff,0080ff,ffff00 && $(stops ambient) == 0000ff,0080ff,ff00ff ]]; then
-  pass "3 colours: accent, blue, then yellow on the desk, magenta around it"
+if [[ $(stops) == 0000ff,ffff00,0080ff && $(stops ambient) == ffff00,0080ff,ff8000 ]]; then
+  pass "3 colours: the accent, then the two most contrasting"
 else
-  fail "3 colours: accent, blue, then yellow on the desk, magenta around it" "$(stops) / $(stops ambient)"
+  fail "3 colours: the accent, then the two most contrasting" "$(stops) / $(stops ambient)"
 fi
 
-# --- 5 colours are the named colours, no accent: desk and ambient orders --
+# --- 5 colours carry on the same order; ambient is one colour along -------
 set_config '{"mode": "palette", "colors": 5}'
-if [[ $(stops) == 0080ff,ffff00,ff0000,00ff00,ff00ff && $(stops ambient) == 0080ff,ff00ff,00ffff,ff0000,00ff00 ]]; then
-  pass "5 colours are the named colours, no accent: desk and ambient orders"
+if [[ $(stops) == 0000ff,ffff00,0080ff,ff8000,00ffff && $(stops ambient) == ffff00,0080ff,ff8000,00ffff,ff0000 ]]; then
+  pass "5 colours carry on the same order; ambient is one colour along"
 else
-  fail "5 colours are the named colours, no accent: desk and ambient orders" "$(stops) / $(stops ambient)"
+  fail "5 colours carry on the same order; ambient is one colour along" "$(stops) / $(stops ambient)"
 fi
 
-# --- 8 colours carry on: cyan, orange, brown on the desk; yellow, orange, brown around it
+# --- 8 colours ------------------------------------------------------------
 set_config '{"mode": "palette", "colors": 8}'
-if [[ $(stops) == 0080ff,ffff00,ff0000,00ff00,ff00ff,00ffff,ff8000,8000ff && $(stops ambient) == 0080ff,ff00ff,00ffff,ff0000,00ff00,ffff00,ff8000,8000ff ]]; then
-  pass "8 colours carry on: cyan, orange, brown on the desk; yellow, orange, brown around it"
+if [[ $(stops) == 0000ff,ffff00,0080ff,ff8000,00ffff,ff0000,00ff00,ff00ff ]]; then
+  pass "8 colours"
 else
-  fail "8 colours carry on: cyan, orange, brown on the desk; yellow, orange, brown around it" "$(stops) / $(stops ambient)"
+  fail "8 colours" "$(stops)"
 fi
 
 # --- missing config means 5 colours ---------------------------------------
 rm "$home/.config/omarchy/theme-rgb.json"
-if [[ $(stops) == 0080ff,ffff00,ff0000,00ff00,ff00ff ]]; then
+if [[ $(stops) == 0000ff,ffff00,0080ff,ff8000,00ffff ]]; then
   pass "missing config means 5 colours"
 else
   fail "missing config means 5 colours" "$(stops)"
 fi
 
-# --- a missing variable and a repeated hex are skipped, the next moves up --
-# No foreground here, and blue is the accent's hex again: yellow, red move up.
-printf 'accent = "#0000ff"\nbackground = "#001000"\nyellow = "#ffff00"\nblue = "#0000ff"\nred = "#ff0000"\n' >"$theme/colors.toml"
-set_config '{"mode": "palette", "colors": 3}'
+# --- greys and dark tones are left out ------------------------------------
+printf 'accent = "#0000ff"\nred = "#ff0000"\ncyan = "#808080"\ngreen = "#002200"\nyellow = "#ffff00"\n' >"$theme/colors.toml"
+set_config '{"mode": "palette", "colors": 5}'
 if [[ $(stops) == 0000ff,ffff00,ff0000 ]]; then
-  pass "a missing variable and a repeated hex are skipped, the next moves up"
+  pass "greys and dark tones are left out"
 else
-  fail "a missing variable and a repeated hex are skipped, the next moves up" "$(stops)"
+  fail "greys and dark tones are left out" "$(stops)"
 fi
 
-# --- background and foreground never join a tier, whatever the roles say --
-set_config '{"mode": "palette", "colors": 3, "roles": {"desk": ["background", "foreground", "accent", "red", "yellow"]}}'
-if [[ $(stops) == 0000ff,ff0000,ffff00 ]]; then
-  pass "background and foreground never join a tier, whatever the roles say"
+# --- near-duplicates collapse to one, the accent winning ------------------
+# blue and green sit on the accent; orange sits on yellow: three bands, not six.
+printf 'accent = "#0000ff"\nblue = "#0010ff"\ngreen = "#1000ff"\nyellow = "#ffff00"\norange = "#fff000"\nred = "#ff0000"\n' >"$theme/colors.toml"
+set_config '{"mode": "palette", "colors": 8}'
+if [[ $(stops) == 0000ff,fff000,ff0000 ]]; then
+  pass "near-duplicates collapse to one, the accent winning"
 else
-  fail "background and foreground never join a tier, whatever the roles say" "$(stops)"
+  fail "near-duplicates collapse to one, the accent winning" "$(stops)"
 fi
 
-# --- the role order comes from the config when it says so -----------------
-set_config '{"mode": "palette", "colors": 3, "roles": {"desk": ["red", "yellow", "accent"], "ambient": ["yellow", "red"]}}'
-if [[ $(stops) == ff0000,ffff00,0000ff && $(stops ambient) == ffff00,ff0000 ]]; then
-  pass "the role order comes from the config when it says so"
+# --- background and foreground never join a tier -------------------------
+printf 'accent = "#0000ff"\nbackground = "#00ff00"\nforeground = "#ff0000"\nyellow = "#ffff00"\n' >"$theme/colors.toml"
+set_config '{"mode": "palette", "colors": 5}'
+if [[ $(stops) == 0000ff,ffff00 ]]; then
+  pass "background and foreground never join a tier"
 else
-  fail "the role order comes from the config when it says so" "$(stops) / $(stops ambient)"
+  fail "background and foreground never join a tier" "$(stops)"
 fi
 
-# --- a theme with one usable colour lights it alone ------------------------
-printf 'accent = "#0000ff"\nblue = "#0000ff"\n' >"$theme/colors.toml"
-set_config '{"mode": "palette", "colors": 3}'
-if [[ $(stops) == 0000ff ]]; then
-  pass "a theme with one usable colour lights it alone"
+# --- a grey theme lights the accent alone ---------------------------------
+printf 'accent = "#8d8d8d"\nred = "#a4a4a4"\nblue = "#9b9b9b"\n' >"$theme/colors.toml"
+if [[ $(stops) == 8d8d8d && $(stops ambient) == 8d8d8d ]]; then
+  pass "a grey theme lights the accent alone"
 else
-  fail "a theme with one usable colour lights it alone" "$(stops)"
+  fail "a grey theme lights the accent alone" "$(stops) / $(stops ambient)"
 fi
 
 # --- each device gets its own class's colours in the one call -------------
@@ -244,7 +247,7 @@ OPENRGB_LIST_DEVICES='0: ENE DRAM
   Type:           Keyboard
   Modes: [Direct] Static
   LEDs: a b c d e ' run_apply
-if called 'openrgb -d 0 -m direct -c 00ff00,00ff00,ff00ff,ff00ff,ffff00 -d 1 -m direct -c 00ff00,00ff00,ffff00,ffff00,ff00ff'; then
+if called 'openrgb -d 0 -m direct -c ffff00,ffff00,ff00ff,00ff00,0000ff -d 1 -m direct -c 0000ff,0000ff,ffff00,ff00ff,00ff00'; then
   pass "each device gets its own class's colours in the one call"
 else
   fail "each device gets its own class's colours in the one call" "$(cat "$calls")"
@@ -252,7 +255,7 @@ fi
 
 # --- failed detection broadcasts the desk colours -------------------------
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" OPENRGB_LIST_FAIL=1 run_apply
-if called 'openrgb -c 00ff00,ffff00,ff00ff'; then
+if called 'openrgb -c 0000ff,ffff00,ff00ff,00ff00'; then
   pass "failed detection broadcasts the desk colours"
 else
   fail "failed detection broadcasts the desk colours" "$(cat "$calls")"

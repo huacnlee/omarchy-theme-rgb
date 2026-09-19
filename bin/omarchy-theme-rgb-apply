@@ -33,16 +33,13 @@ CUSTOM=""
 BRIGHTNESS=100
 LAYOUT=flow        # flow | rows | columns | zones
 
-# With three, five or eight colours each device lights the theme's roles in
-# an order that suits what it is for. The desk (keyboard, mouse, ...) is the
-# working surface; everything else — the screen's backlight, the strips,
-# what is inside the case — is ambient. Background and foreground are left
-# out: one is near black in most themes and the other near white, and a band
-# of either is a band of dark or colourless keys. Both stay available to
-# pick by hand.
+# With three, five or eight colours each device lights the theme's own
+# colours, chosen per theme (see theme_order): the accent first, then the
+# colours that differ most from their neighbour, skipping greys, dark tones
+# and near-duplicates. The desk (keyboard, mouse, ...) takes that order;
+# everything else — the screen's backlight, the strips, what is inside the
+# case — starts one colour later, so the two are related but not identical.
 DESK_TYPES="Keyboard Mouse Mousemat Headset HeadsetStand Gamepad"
-DESK_ROLES="accent blue yellow red green magenta cyan orange brown"
-AMBIENT_ROLES="accent blue magenta cyan red green yellow orange brown"
 
 is_variable() { [[ " $VARIABLES " == *" $1 "* ]]; }
 
@@ -53,8 +50,6 @@ if [[ -f $CONFIG ]] && command -v jq >/dev/null 2>&1; then
   custom=$(jq -r '(.custom // []) | if type == "array" then join(" ") else "" end' "$CONFIG" 2>/dev/null)
   brightness=$(jq -r '.brightness // empty' "$CONFIG" 2>/dev/null)
   layout=$(jq -r '.layout // empty' "$CONFIG" 2>/dev/null)
-  desk_roles=$(jq -r '(.roles.desk // []) | if type == "array" then join(" ") else "" end' "$CONFIG" 2>/dev/null)
-  ambient_roles=$(jq -r '(.roles.ambient // []) | if type == "array" then join(" ") else "" end' "$CONFIG" 2>/dev/null)
   [[ $mode == single || $mode == palette || $mode == custom ]] && MODE=$mode
   is_variable "$single" && SINGLE=$single
   [[ $colors == 3 || $colors == 5 || $colors == 8 ]] && COLORS=$colors
@@ -63,8 +58,6 @@ if [[ -f $CONFIG ]] && command -v jq >/dev/null 2>&1; then
     BRIGHTNESS=$brightness
   fi
   [[ $layout == flow || $layout == rows || $layout == columns || $layout == zones ]] && LAYOUT=$layout
-  [[ -n $desk_roles ]] && DESK_ROLES=$desk_roles
-  [[ -n $ambient_roles ]] && AMBIENT_ROLES=$ambient_roles
 fi
 
 # --- keyboard geometry ----------------------------------------------------
@@ -206,25 +199,85 @@ variable_color() {
   theme_variables | awk -v name="$1" '$1 == name { print $2; exit }'
 }
 
-# The first `count` usable colours from a role list: variables the theme
-# lacks are skipped, as is a colour already taken (many themes reuse one hex
-# for accent and a named colour). The accent belongs to one and three
-# colours only; five and eight are the theme's named colours. Raw hex, one
-# per line.
-role_colors() {
-  local roles="$1" count="$2" name hex taken=" " n=0
-  for name in $roles; do
-    is_variable "$name" || continue
-    # Never the background or foreground, whatever the list says: near black
-    # and near white make dark or colourless bands.
-    [[ $name == background || $name == foreground ]] && continue
-    [[ $name == accent ]] && (( count > 3 )) && continue
-    hex=$(variable_color "$name")
-    [[ -n $hex && $taken != *" $hex "* ]] || continue
-    echo "$hex"
-    taken="$taken$hex "
-    (( ++n < count )) || break
-  done
+# The theme's colours in the order they light, raw hex one per line:
+#   1. candidates are the accent and red orange yellow green cyan blue
+#      magenta brown — never background or foreground — with a hue to show:
+#      saturation >= 15% and value >= 30%;
+#   2. near-duplicates (hue within 12 degrees, saturation and value within
+#      25 points) collapse to one: the accent, else the more vivid, else the
+#      earlier name;
+#   3. the accent comes first, then repeatedly the remaining colour whose hue
+#      is farthest from the previous one (ties: more vivid, then earlier), so
+#      neighbouring bands contrast.
+# A grey theme yields nothing and the caller falls back to the accent alone.
+theme_order() {
+  theme_variables | awk '
+    function hex_value(char) { return index("0123456789abcdef", tolower(char)) - 1 }
+    function channel(hex, idx) { return hex_value(substr(hex, idx, 1)) * 16 + hex_value(substr(hex, idx + 1, 1)) }
+    function analyse(hex,   r, g, b, mx, mn, d) {
+      r = channel(hex, 1) / 255; g = channel(hex, 3) / 255; b = channel(hex, 5) / 255
+      mx = r; if (g > mx) mx = g; if (b > mx) mx = b
+      mn = r; if (g < mn) mn = g; if (b < mn) mn = b
+      d = mx - mn
+      val = mx * 100
+      sat = mx > 0 ? d / mx * 100 : 0
+      if (d == 0) hue = 0
+      else if (mx == r) hue = 60 * ((g - b) / d)
+      else if (mx == g) hue = 60 * ((b - r) / d + 2)
+      else hue = 60 * ((r - g) / d + 4)
+      if (hue < 0) hue += 360
+    }
+    function hue_gap(a, b,   d) { d = a - b; if (d < 0) d = -d; return d > 180 ? 360 - d : d }
+    function abs(x) { return x < 0 ? -x : x }
+    $1 == "background" || $1 == "foreground" { next }
+    {
+      analyse($2)
+      if (sat < 15 || val < 30) next
+      n++; name[n] = $1; hex[n] = $2; h[n] = hue; s[n] = sat; v[n] = val; vivid[n] = sat * val
+    }
+    END {
+      # collapse near-duplicates
+      for (i = 1; i <= n; i++) {
+        if (dropped[i]) continue
+        for (j = i + 1; j <= n; j++) {
+          if (dropped[j]) continue
+          if (hue_gap(h[i], h[j]) < 12 && abs(s[i] - s[j]) < 25 && abs(v[i] - v[j]) < 25) {
+            if (name[j] == "accent" || (name[i] != "accent" && vivid[j] > vivid[i])) { dropped[i] = 1; break }
+            dropped[j] = 1
+          }
+        }
+      }
+      # the accent first
+      prev = 0
+      for (i = 1; i <= n; i++) if (!dropped[i] && name[i] == "accent") { prev = i; break }
+      if (prev == 0) for (i = 1; i <= n; i++) if (!dropped[i]) { prev = i; break }
+      if (prev == 0) exit
+      print hex[prev]; taken[prev] = 1
+      # then the colour farthest in hue from the one before
+      while (1) {
+        best = 0
+        for (i = 1; i <= n; i++) {
+          if (dropped[i] || taken[i]) continue
+          g = hue_gap(h[i], h[prev])
+          if (best == 0 || g > bestgap || (g == bestgap && vivid[i] > vivid[best])) { best = i; bestgap = g }
+        }
+        if (best == 0) break
+        print hex[best]; taken[best] = 1; prev = best
+      }
+    }
+  '
+}
+
+# The first `count` colours of the theme order for a class: the desk takes
+# it as is, ambient starts one colour later.
+class_colors() {
+  local class="$1" count="$2" all=()
+  mapfile -t all < <(theme_order)
+  (( ${#all[@]} > 0 )) || return
+  if [[ $class == ambient ]] && (( ${#all[@]} > 1 )); then
+    all=("${all[@]:1}" "${all[0]}")
+  fi
+  printf '%s\n' "${all[@]:0:count}"
 }
 
 # The listed variables, in the listed order; unknown names are skipped.
@@ -268,10 +321,7 @@ class_stops() {
   local class="$1" color colors=()
 
   case $MODE in
-    palette)
-      if [[ $class == desk ]]; then mapfile -t colors < <(role_colors "$DESK_ROLES" "$COLORS")
-      else mapfile -t colors < <(role_colors "$AMBIENT_ROLES" "$COLORS"); fi
-      ;;
+    palette) mapfile -t colors < <(class_colors "$class" "$COLORS") ;;
     custom) mapfile -t colors < <(custom_colors) ;;
   esac
   if (( ${#colors[@]} == 0 )); then

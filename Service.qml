@@ -22,13 +22,6 @@ Item {
   // What theme-rgb.json says, with the script's defaults.
   property string mode: "palette"        // "single" | "palette" | "custom"
   property string single: ""             // "" = accent
-  // Role order per device class for 3/5/8 colours; empty = the script's
-  // defaults below. The desk (keyboard, mouse, …) is the working surface,
-  // everything else is ambient.
-  property var deskRoles: []
-  property var ambientRoles: []
-  readonly property var defaultDeskRoles: ["accent", "blue", "yellow", "red", "green", "magenta", "cyan", "orange", "brown"]
-  readonly property var defaultAmbientRoles: ["accent", "blue", "magenta", "cyan", "red", "green", "yellow", "orange", "brown"]
   property int colors: 5
   property var custom: []
   property int brightness: 100
@@ -72,9 +65,6 @@ Item {
     if (!parsed || typeof parsed !== "object") parsed = {}
     mode = parsed.mode === "single" || parsed.mode === "custom" ? parsed.mode : "palette"
     single = typeof parsed.single === "string" ? parsed.single : ""
-    var roles = parsed.roles && typeof parsed.roles === "object" ? parsed.roles : {}
-    deskRoles = Array.isArray(roles.desk) ? roles.desk.map(function(v) { return String(v) }) : []
-    ambientRoles = Array.isArray(roles.ambient) ? roles.ambient.map(function(v) { return String(v) }) : []
     var n = Number(parsed.colors)
     colors = n === 3 || n === 8 ? n : 5
     custom = Array.isArray(parsed.custom) ? parsed.custom.map(function(v) { return String(v) }) : []
@@ -91,32 +81,13 @@ Item {
   // One save for "palette with n colours", so the file never holds a half
   // state between two writes.
   function setPalette(n) { if (n === 3 || n === 5 || n === 8) { colors = n; mode = "palette"; save() } }
-
-  // The accent belongs to one and three colours only; with five or eight
-  // the named colours light, so it drops out of the order shown and used.
-  function rolesFor(cls) {
-    var list = cls === "ambient"
-      ? (ambientRoles.length > 0 ? ambientRoles : defaultAmbientRoles)
-      : (deskRoles.length > 0 ? deskRoles : defaultDeskRoles)
-    return list.filter(function(v) { return v !== "background" && v !== "foreground" && (colors <= 3 || v !== "accent") })
-  }
-
-  // Make `name` the first role of a class; the rest keep their order.
-  function setRolePrimary(cls, name) {
-    var next = [String(name)].concat(rolesFor(cls).filter(function(v) { return v !== name }))
-    if (cls === "ambient") ambientRoles = next
-    else deskRoles = next
-    save()
-  }
-  function setLayout(value) {
-    if (value === "flow" || value === "rows" || value === "columns" || value === "zones") { layout = value; save() }
-  }
   function toggleCustom(name) {
     var next = custom.filter(function(v) { return v !== name })
     if (next.length === custom.length) next.push(name)
     custom = next
     save()
   }
+
   function setBrightness(value) {
     var b = Math.round(Number(value))
     if (!isFinite(b)) return
@@ -145,8 +116,7 @@ Item {
       colors: colors,
       custom: custom,
       brightness: brightness,
-      layout: layout,
-      roles: { desk: deskRoles, ambient: ambientRoles }
+      layout: layout
     }
     saveProcess.command = ["bash", "-c",
       'mkdir -p "$(dirname "$1")" && printf "%s\\n" "$2" > "$1"', "_",

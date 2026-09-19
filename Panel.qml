@@ -63,12 +63,6 @@ Panel {
     if (service.lastSyncFailed) return "Last sync failed"
     return slogan
   }
-  readonly property string modeHint: {
-    if (mode === "single") return "The accent on every device."
-    if (modeValue === "3") return "The accent and two of the theme's colours."
-    if (modeValue === "8") return "Eight of the theme's colours; the desk and what is around it get their own order."
-    return "Five of the theme's colours; the desk (keyboard, mouse) and what is around it (screen, case) get their own order."
-  }
   readonly property string layout: service ? String(service.layout) : "flow"
   readonly property var layouts: [
     { value: "flow", label: "Flow", tooltip: "Bands along the LED order — top to bottom on most keyboards" },
@@ -366,15 +360,6 @@ Panel {
               themeRgb.cursorRow = "mode"
               themeRgb.cursorIndex = index
             }
-          }
-
-          Text {
-            width: parent.width
-            wrapMode: Text.WordWrap
-            text: themeRgb.modeHint
-            color: themeRgb.dim
-            font.family: themeRgb.fontFamily
-            font.pixelSize: Style.font.caption
           }
         }
 
