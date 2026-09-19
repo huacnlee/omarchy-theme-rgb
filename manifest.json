@@ -6,7 +6,7 @@
   "author": "huacnlee",
   "license": "MIT",
   "homepage": "https://github.com/huacnlee/omarchy-theme-rgb",
-  "description": "Keeps every device OpenRGB manages in the colours of the current Omarchy theme: keyboards, mice, RAM, fans and strips retint on theme switch and at login. Choose one theme colour or a blend of the theme colours nearest its accent from the bar.",
+  "description": "Your theme, on every light. Keeps every device OpenRGB manages \u2014 keyboard, mouse, RAM, fans, strips \u2014 in the colours of the current Omarchy theme, on theme switch and at login. Pick one theme colour or a set of them from the bar, and how they lie across a keyboard.",
   "kinds": [
     "service",
     "bar-widget"
@@ -17,7 +17,7 @@
   },
   "barWidget": {
     "displayName": "Theme RGB",
-    "description": "Palette glyph in the bar; click to choose one theme colour or a blend of two, three or five, previewed exactly as the LEDs will show it.",
+    "description": "Palette glyph in the bar; click to pick which theme colours light your devices, how they are laid out on a keyboard, and how bright.",
     "category": "System",
     "aliases": [
       "openrgb",
