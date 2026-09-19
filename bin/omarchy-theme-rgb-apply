@@ -30,6 +30,7 @@ ANCHOR=accent
 COLORS=5
 CUSTOM=""
 BRIGHTNESS=100
+LAYOUT=flow        # flow | rows | columns | zones
 
 is_variable() { [[ " $VARIABLES " == *" $1 "* ]]; }
 
@@ -40,15 +41,134 @@ if [[ -f $CONFIG ]] && command -v jq >/dev/null 2>&1; then
   colors=$(jq -r '.colors // empty' "$CONFIG" 2>/dev/null)
   custom=$(jq -r '(.custom // []) | if type == "array" then join(" ") else "" end' "$CONFIG" 2>/dev/null)
   brightness=$(jq -r '.brightness // empty' "$CONFIG" 2>/dev/null)
+  layout=$(jq -r '.layout // empty' "$CONFIG" 2>/dev/null)
   [[ $mode == single || $mode == palette || $mode == custom ]] && MODE=$mode
   is_variable "$single" && SINGLE=$single
   is_variable "$anchor" && ANCHOR=$anchor
   [[ $colors == 3 || $colors == 5 ]] && COLORS=$colors
   CUSTOM=$custom
+  [[ $layout == flow || $layout == rows || $layout == columns || $layout == zones ]] && LAYOUT=$layout
   if [[ $brightness =~ ^[0-9]+$ ]] && (( brightness >= 1 && brightness <= 100 )); then
     BRIGHTNESS=$brightness
   fi
 fi
+
+# --- keyboard geometry ----------------------------------------------------
+
+# Where each key sits on a full-size ANSI board, from the names OpenRGB gives
+# keyboard LEDs ("Key: Escape"). row 0-5 top to bottom, col in key units from
+# the left, zone: fn main mod nav numpad logo. A name not listed keeps the
+# colour its LED index would get in the flow.
+KEY_MAP='
+0 0 fn Escape
+0 2 fn F1
+0 3 fn F2
+0 4 fn F3
+0 5 fn F4
+0 6.5 fn F5
+0 7.5 fn F6
+0 8.5 fn F7
+0 9.5 fn F8
+0 11 fn F9
+0 12 fn F10
+0 13 fn F11
+0 14 fn F12
+0 15.5 fn Print Screen
+0 16.5 fn Scroll Lock
+0 17.5 fn Pause/Break
+1 0 main `
+1 1 main 1
+1 2 main 2
+1 3 main 3
+1 4 main 4
+1 5 main 5
+1 6 main 6
+1 7 main 7
+1 8 main 8
+1 9 main 9
+1 10 main 0
+1 11 main -
+1 12 main =
+1 13.5 mod Backspace
+1 15.5 nav Insert
+1 16.5 nav Home
+1 17.5 nav Page Up
+1 19 numpad Num Lock
+1 20 numpad Number Pad /
+1 21 numpad Number Pad *
+1 22 numpad Number Pad -
+2 0.5 mod Tab
+2 1.5 main Q
+2 2.5 main W
+2 3.5 main E
+2 4.5 main R
+2 5.5 main T
+2 6.5 main Y
+2 7.5 main U
+2 8.5 main I
+2 9.5 main O
+2 10.5 main P
+2 11.5 main [
+2 12.5 main ]
+2 13.75 main \ (ANSI)
+2 15.5 nav Delete
+2 16.5 nav End
+2 17.5 nav Page Down
+2 19 numpad Number Pad 7
+2 20 numpad Number Pad 8
+2 21 numpad Number Pad 9
+2 22 numpad Number Pad +
+3 0.75 mod Caps Lock
+3 1.75 main A
+3 2.75 main S
+3 3.75 main D
+3 4.75 main F
+3 5.75 main G
+3 6.75 main H
+3 7.75 main J
+3 8.75 main K
+3 9.75 main L
+3 10.75 main ;
+3 11.75 main '"'"'
+3 12.75 main # (ISO)
+3 13.5 mod Enter
+3 19 numpad Number Pad 4
+3 20 numpad Number Pad 5
+3 21 numpad Number Pad 6
+4 1 mod Left Shift
+4 1.5 main \ (ISO)
+4 2.25 main Z
+4 3.25 main X
+4 4.25 main C
+4 5.25 main V
+4 6.25 main B
+4 7.25 main N
+4 8.25 main M
+4 9.25 main ,
+4 10.25 main .
+4 11.25 main /
+4 13 mod Right Shift
+4 16.5 nav Up Arrow
+4 19 numpad Number Pad 1
+4 20 numpad Number Pad 2
+4 21 numpad Number Pad 3
+4 22 numpad Number Pad Enter
+5 0.5 mod Left Control
+5 2 mod Left Windows
+5 3.25 mod Left Alt
+5 7 mod Space
+5 10.75 mod Right Alt
+5 12 mod Right Windows
+5 12 mod Right Fn
+5 13 mod Menu
+5 14.25 mod Right Control
+5 15.5 nav Left Arrow
+5 16.5 nav Down Arrow
+5 17.5 nav Right Arrow
+5 19.5 numpad Number Pad 0
+5 21 numpad Number Pad .
+'
+KEY_ZONES="fn main mod nav numpad logo"
 
 # --- theme colours --------------------------------------------------------
 
@@ -247,13 +367,41 @@ openrgb_call() {
 # slow scan never stalls the theme switch.
 devices=$(timeout "$OPENRGB_TIMEOUT" openrgb --list-devices 2>/dev/null || true)
 
-# One "<id>|<mode>|<leds>|<name>|<type>" line per device: mode is the device's
-# own gradient effect if it has one (single mode uses it), leds is how many
-# LEDs it lists. Mode and LED names with spaces are single-quoted by openrgb.
+# One "<id>|<mode>|<leds>|<name>|<type>|<zones>|<led names>" line per device:
+# mode is the device's own gradient effect if it has one (single mode uses
+# it), leds is how many LEDs it lists, zones how many zones, and the LED
+# names follow separated by tabs. openrgb prints every LED name followed by a
+# space, single-quoting names with spaces and printing nothing for a blank
+# matrix cell, so the tokens are counted exactly: a blank still owns an index.
+# The quote key prints as 'Key: '' and is put back together.
 device_info() {
   awk '
+    function tokens(line, sep,   i, n, c, j, out, tok) {
+      out = ""; i = 1; n = length(line)
+      while (i <= n) {
+        c = substr(line, i, 1)
+        if (c == "\047") {
+          j = index(substr(line, i + 1), "\047")
+          if (j == 0) { tok = substr(line, i + 1); i = n + 1 }
+          else {
+            tok = substr(line, i + 1, j - 1); i = i + j + 1
+            if (substr(line, i, 1) == "\047") { tok = tok "\047"; i++ }
+          }
+          if (substr(line, i, 1) == " ") i++
+        } else if (c == " ") {
+          tok = ""; i++
+        } else {
+          j = index(substr(line, i), " ")
+          if (j == 0) { tok = substr(line, i); i = n + 1 }
+          else { tok = substr(line, i, j - 1); i = i + j }
+        }
+        count++
+        out = out (count > 1 ? sep : "") tok
+      }
+      return out
+    }
     function flush() {
-      if (current != "") print current "|" mode "|" leds "|" name "|" type
+      if (current != "") print current "|" mode "|" leds "|" name "|" type "|" zones "|" names
     }
     /^[0-9]+: / {
       flush()
@@ -263,6 +411,8 @@ device_info() {
       mode = ""
       leds = 0
       type = ""
+      zones = 0
+      names = ""
     }
     /^  Type: / && current != "" {
       type = $2
@@ -270,11 +420,11 @@ device_info() {
     /^  Modes: / && current != "" {
       modes = substr($0, 9)
       gsub(/[\[\]]/, "", modes)
-      if (match(modes, /'"'"'[^'"'"']*[Gg]radient[^'"'"']*'"'"'/)) {
+      if (match(modes, /\047[^\047]*[Gg]radient[^\047]*\047/)) {
         mode = substr(modes, RSTART + 1, RLENGTH - 2)
       } else {
-        count = split(modes, parts, / +/)
-        for (i = 1; i <= count; i++) {
+        n = split(modes, parts, / +/)
+        for (i = 1; i <= n; i++) {
           if (parts[i] ~ /[Gg]radient/) {
             mode = parts[i]
             break
@@ -282,31 +432,66 @@ device_info() {
         }
       }
     }
+    /^  Zones: / && current != "" {
+      count = 0
+      tokens(substr($0, 10), "\t")
+      zones = count
+    }
     /^  LEDs: / && current != "" {
-      rest = substr($0, 8)
-      leds = gsub(/'"'"'[^'"'"']*'"'"'/, "", rest)
-      gsub(/^ +| +$/, "", rest)
-      if (rest != "") leds += split(rest, words, / +/)
+      count = 0
+      names = tokens(substr($0, 9), "\t")
+      leds = count
     }
     END { flush() }
   ' <<<"$devices"
 }
 
-# Fill `count` LEDs with the stops as contiguous bands with hard edges: LED i
-# takes stop floor(i * k / count). Printed as the comma list `-c` takes. An
-# unknown count sends the stops as they are.
+# The colour list `-c` takes for one device: `count` LEDs filled with the
+# stops as contiguous bands with hard edges. In the flow, LED i takes stop
+# floor(i * k / count). On a keyboard (LED names "Key: ...") the other
+# layouts place the bands by where the key sits: rows top to bottom, columns
+# left to right, or one band per zone (fn, main, mod, nav, numpad, logo),
+# cycling through the stops. A key the map does not know, and a blank cell,
+# keep their flow colour. An unknown count sends the stops as they are.
 led_colors() {
-  local count="$1"
+  local count="$1" names="$2"
 
   if (( count < 1 )); then
     IFS=, ; echo "${STOPS[*]}"; return
   fi
 
-  awk -v count="$count" -v stops="$(IFS=,; echo "${STOPS[*]}")" '
+  awk -v count="$count" -v stops="$(IFS=,; echo "${STOPS[*]}")" -v layout="$LAYOUT" \
+      -v keymap="$KEY_MAP" -v zone_names="$KEY_ZONES" -v names="$names" '
     BEGIN {
       k = split(stops, stop, ",")
-      for (i = 0; i < count; i++)
-        printf "%s%s", (i ? "," : ""), stop[int(i * k / count) + 1]
+      split(names, led, "\t")
+      nz = split(zone_names, zone_list, " ")
+      for (i = 1; i <= nz; i++) zone_index[zone_list[i]] = i - 1
+      nk = split(keymap, lines, "\n")
+      for (i = 1; i <= nk; i++) {
+        if (lines[i] == "") continue
+        split(lines[i], f, " ")
+        key = substr(lines[i], length(f[1]) + length(f[2]) + length(f[3]) + 4)
+        row[key] = f[1] + 0; col[key] = f[2] + 0; zone[key] = f[3]
+      }
+      # Spread columns over the keys this board actually has.
+      maxcol = 0
+      for (i = 1; i <= count; i++) {
+        key = led[i]; sub(/^Key: /, "", key)
+        if (led[i] ~ /^Key: / && (key in col) && col[key] > maxcol) maxcol = col[key]
+      }
+      for (i = 0; i < count; i++) {
+        s = int(i * k / count)
+        name = led[i + 1]
+        key = name; sub(/^Key: /, "", key)
+        if (layout == "zones" && name ~ /[Ll]ogo/) s = zone_index["logo"] % k
+        else if (name ~ /^Key: / && (key in row)) {
+          if (layout == "rows") s = int(row[key] * k / 6)
+          else if (layout == "columns" && maxcol > 0) { s = int(col[key] / maxcol * k); if (s >= k) s = k - 1 }
+          else if (layout == "zones") s = zone_index[zone[key]] % k
+        }
+        printf "%s%s", (i ? "," : ""), stop[s + 1]
+      }
       printf "\n"
     }
   '
@@ -328,9 +513,17 @@ device_info | awk -F'|' -v order="$DEVICE_TYPE_ORDER" '
 ' | sort | cut -d' ' -f3- >"$DEVICES_FILE"
 
 args=()
-while IFS="|" read -r id mode leds name type; do
+while IFS="|" read -r id mode leds name type zones names; do
   if (( ${#STOPS[@]} > 1 )); then
-    args+=(-d "$id" -c "$(led_colors "$leds")")
+    if [[ $LAYOUT == zones && $names != *"Key: "* ]] && (( zones > 1 )); then
+      # Not a keyboard: one colour per OpenRGB zone, cycling through the stops.
+      args+=(-d "$id")
+      for (( z = 0; z < zones; z++ )); do
+        args+=(-z "$z" -c "${STOPS[z % ${#STOPS[@]}]}")
+      done
+    else
+      args+=(-d "$id" -c "$(led_colors "$leds" "$names")")
+    fi
   else
     args+=(-d "$id" -m "${mode:-static}" -c "$color" -b 100)
   fi

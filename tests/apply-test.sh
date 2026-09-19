@@ -350,6 +350,96 @@ else
   fail "bands: LEDs split evenly, remainder goes to the last colours" "$(cat "$calls")"
 fi
 
+# ==========================================================================
+# layout: where each colour goes on a keyboard
+# ==========================================================================
+KEYBOARD='4: Razer Blackwidow V3
+  Type:           Keyboard
+  Modes: [Direct] Static
+  Zones: Keyboard
+  LEDs: '"'"'Key: Space'"'"' '"'"'Key: Escape'"'"' '"'"'Key: A'"'"' '"'"'Key: 1'"'"' '"'"'Key: Z'"'"' '"'"'Key: Q'"'"' '
+set_config '{"mode": "custom", "custom": ["red", "green", "blue"], "layout": "rows"}'
+
+# --- rows: the six key rows split top to bottom ---------------------------
+# Space is on the bottom row, Escape the top, A the home row, 1 the number
+# row, Z the shift row, Q the qwerty row — nothing like their LED order.
+OPENRGB_LIST_DEVICES="$KEYBOARD" run_apply
+if called 'openrgb -d 4 -c 0000ff,ff0000,00ff00,ff0000,0000ff,00ff00'; then
+  pass "rows: the six key rows split top to bottom"
+else
+  fail "rows: the six key rows split top to bottom" "$(cat "$calls")"
+fi
+
+# --- columns: keys split left to right by their position ------------------
+set_config '{"mode": "custom", "custom": ["red", "green", "blue"], "layout": "columns"}'
+OPENRGB_LIST_DEVICES='4: Razer Blackwidow V3
+  Type:           Keyboard
+  LEDs: '"'"'Key: Number Pad .'"'"' '"'"'Key: Escape'"'"' '"'"'Key: Right Shift'"'"' '"'"'Key: G'"'"' ' run_apply
+# Numpad on the far right, Escape far left, Right Shift past the middle, G
+# in the left third.
+if called 'openrgb -d 4 -c 0000ff,ff0000,00ff00,ff0000'; then
+  pass "columns: keys split left to right by their position"
+else
+  fail "columns: keys split left to right by their position" "$(cat "$calls")"
+fi
+
+# --- zones: function keys, main block, modifiers, navigation, numpad, logo -
+set_config '{"mode": "custom", "custom": ["red", "green", "blue"], "layout": "zones"}'
+OPENRGB_LIST_DEVICES='4: Razer Blackwidow V3
+  Type:           Keyboard
+  LEDs: '"'"'Key: F1'"'"' '"'"'Key: A'"'"' '"'"'Key: Left Shift'"'"' '"'"'Key: Home'"'"' '"'"'Key: Number Pad 7'"'"' Logo ' run_apply
+if called 'openrgb -d 4 -c ff0000,00ff00,0000ff,ff0000,00ff00,0000ff'; then
+  pass "zones: function keys, main block, modifiers, navigation, numpad, logo"
+else
+  fail "zones: function keys, main block, modifiers, navigation, numpad, logo" "$(cat "$calls")"
+fi
+
+# --- zones on another device colour its OpenRGB zones in turn -------------
+OPENRGB_LIST_DEVICES='3: Razer Basilisk V3
+  Type:           Mouse
+  Zones: Logo '"'"'Scroll Wheel'"'"' '"'"'LED Strip'"'"'
+  LEDs: Logo '"'"'Scroll Wheel'"'"' '"'"'LED Strip LED 1'"'"' '"'"'LED Strip LED 2'"'"' ' run_apply
+if called 'openrgb -d 3 -z 0 -c ff0000 -z 1 -c 00ff00 -z 2 -c 0000ff'; then
+  pass "zones on another device colour its OpenRGB zones in turn"
+else
+  fail "zones on another device colour its OpenRGB zones in turn" "$(cat "$calls")"
+fi
+
+# --- rows on a strip is just the flow -------------------------------------
+set_config '{"mode": "custom", "custom": ["red", "green", "blue"], "layout": "rows"}'
+OPENRGB_LIST_DEVICES='0: Fake Strip
+  Type:           LEDStrip
+  LEDs: a b c d e f ' run_apply
+if called 'openrgb -d 0 -c ff0000,ff0000,00ff00,00ff00,0000ff,0000ff'; then
+  pass "rows on a strip is just the flow"
+else
+  fail "rows on a strip is just the flow" "$(cat "$calls")"
+fi
+
+# --- empty matrix cells and the quote key keep their LED index ------------
+OPENRGB_LIST_DEVICES='4: Razer Blackwidow V3
+  Type:           Keyboard
+  LEDs:  '"'"'Key: Space'"'"'  '"'"'Key: '"'"''"'"' '"'"'Key: Escape'"'"' ' run_apply
+# Index 0 and 2 are blank cells (they take the flow colour for their index),
+# Space at 1 is the bottom row, the quote key at 3 the home row, Escape at 4
+# the top row.
+if called 'openrgb -d 4 -c ff0000,0000ff,00ff00,00ff00,ff0000'; then
+  pass "empty matrix cells and the quote key keep their LED index"
+else
+  fail "empty matrix cells and the quote key keep their LED index" "$(cat "$calls")"
+fi
+
+# --- an unknown key name falls back to its flow position ------------------
+OPENRGB_LIST_DEVICES='4: Some Keyboard
+  Type:           Keyboard
+  LEDs: '"'"'Key: Escape'"'"' '"'"'Key: Mystery'"'"' '"'"'Key: Space'"'"' ' run_apply
+if called 'openrgb -d 4 -c ff0000,00ff00,0000ff'; then
+  pass "an unknown key name falls back to its flow position"
+else
+  fail "an unknown key name falls back to its flow position" "$(cat "$calls")"
+fi
+set_config '{"mode": "custom", "custom": ["red", "green", "blue"]}'
+
 # --- every apply records the devices it found, desk peripherals first ------
 devices_file="$home/.local/state/omarchy/theme-rgb/devices"
 OPENRGB_LIST_DEVICES='0: ENE DRAM
