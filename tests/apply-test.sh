@@ -152,6 +152,96 @@ else
   fail "stops prints the single colour without touching openrgb" "$(stops; cat "$calls")"
 fi
 
+# ==========================================================================
+# palette mode: theme colours nearest in hue to the accent, never a rainbow
+# ==========================================================================
+# Synthetic palette with easy hues: accent blue (240°); brown 270°, cyan 180°
+# and magenta 300° are the neighbours; red/green (120° away) come next; the
+# blue key duplicates the accent and yellow is opposite.
+rm -f "$theme/keyboard.rgb"
+cat >"$theme/colors.toml" <<'TOML'
+accent = "#0000ff"
+red = "#ff0000"
+orange = "#ff8000"
+yellow = "#ffff00"
+green = "#00ff00"
+cyan = "#00ffff"
+blue = "#0000ff"
+magenta = "#ff00ff"
+brown = "#8000ff"
+bright_red = "#ff0000"
+TOML
+
+# --- 2 colours: accent plus its nearest theme hue --------------------------
+set_config '{"mode": "palette", "colors": 2}'
+if [[ $(stops | paste -sd,) == 2626ff,9326ff ]]; then
+  pass "2 colours: accent plus its nearest theme hue"
+else
+  fail "2 colours: accent plus its nearest theme hue" "$(stops | paste -sd,)"
+fi
+
+# --- 3 colours: ordered by hue so the gradient flows through the accent ---
+set_config '{"mode": "palette", "colors": 3}'
+if [[ $(stops | paste -sd,) == 26ffff,2626ff,9326ff ]]; then
+  pass "3 colours: ordered by hue so the gradient flows through the accent"
+else
+  fail "3 colours: ordered by hue so the gradient flows through the accent" "$(stops | paste -sd,)"
+fi
+
+# --- 5 colours: nearest hues win, the opposite hue never appears ----------
+set_config '{"mode": "palette", "colors": 5}'
+if [[ $(stops | paste -sd,) == 26ffff,2626ff,9326ff,ff26ff,ff2626 ]]; then
+  pass "5 colours: nearest hues win, the opposite hue never appears"
+else
+  fail "5 colours: nearest hues win, the opposite hue never appears" "$(stops | paste -sd,)"
+fi
+
+# --- missing config defaults to 5 palette colours -------------------------
+rm "$home/.config/omarchy/theme-rgb.json"
+if [[ $(stops | paste -sd,) == 26ffff,2626ff,9326ff,ff26ff,ff2626 ]]; then
+  pass "missing config defaults to 5 palette colours"
+else
+  fail "missing config defaults to 5 palette colours" "$(stops | paste -sd,)"
+fi
+
+# --- palette colours are interpolated across each device's LEDs ----------
+set_config '{"mode": "palette", "colors": 2}'
+OPENRGB_LIST_DEVICES='0: Fake Strip
+  Modes: Direct Static
+  LEDs: '"'"'LED 1'"'"' '"'"'LED 2'"'"' '"'"'LED 3'"'"'
+1: Fake Logo
+  Modes: [Direct] Static
+  LEDs: Logo' run_apply
+if (( $(call_count) == 2 )) && called 'openrgb -d 0 -c 2626ff,5d26ff,9326ff -d 1 -c 5d26ff'; then
+  pass "palette colours are interpolated across each device's LEDs"
+else
+  fail "palette colours are interpolated across each device's LEDs" "$(cat "$calls")"
+fi
+
+# --- failed detection broadcasts the palette stops -------------------------
+OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" OPENRGB_LIST_FAIL=1 run_apply
+if called 'openrgb -c 2626ff,9326ff'; then
+  pass "failed detection broadcasts the palette stops"
+else
+  fail "failed detection broadcasts the palette stops" "$(cat "$calls")"
+fi
+
+# --- a theme with too few colours falls back to single --------------------
+printf 'accent = "#0000ff"\nblue = "#0000ff"\n' >"$theme/colors.toml"
+if [[ $(stops | paste -sd,) == 2626ff ]]; then
+  pass "a theme with too few colours falls back to single"
+else
+  fail "a theme with too few colours falls back to single" "$(stops | paste -sd,)"
+fi
+
+# --- a grey accent has no hue to follow, so single wins -------------------
+printf 'accent = "#cacccc"\nred = "#ff0000"\nblue = "#0000ff"\n' >"$theme/colors.toml"
+if [[ $(stops | paste -sd,) == d2d4d4 ]]; then
+  pass "a grey accent has no hue to follow, so single wins"
+else
+  fail "a grey accent has no hue to follow, so single wins" "$(stops | paste -sd,)"
+fi
+
 echo
 if (( failures > 0 )); then
   echo "$failures failing"

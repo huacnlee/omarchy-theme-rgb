@@ -77,13 +77,107 @@ single_color() {
   fi
 }
 
+# Theme colours that sit nearest the accent on the hue wheel, so the light
+# reads as this theme rather than as a rainbow. Prints raw hex, one per line,
+# ordered by hue so a gradient through them flows via the accent. Prints
+# nothing when the theme cannot support it (grey accent, too few colours).
+palette_colors() {
+  [[ -f $THEME_DIR/colors.toml ]] || return
+
+  awk -v want="$COLORS" '
+    function hex_value(char) {
+      return index("0123456789abcdef", tolower(char)) - 1
+    }
+    function channel(hex, idx) {
+      return hex_value(substr(hex, idx, 1)) * 16 + hex_value(substr(hex, idx + 1, 1))
+    }
+    # HSV hue in degrees and saturation 0..1 for a 6-digit hex.
+    function analyse(hex,   r, g, b, mx, mn, d) {
+      r = channel(hex, 1) / 255; g = channel(hex, 3) / 255; b = channel(hex, 5) / 255
+      mx = r; if (g > mx) mx = g; if (b > mx) mx = b
+      mn = r; if (g < mn) mn = g; if (b < mn) mn = b
+      d = mx - mn
+      sat = mx > 0 ? d / mx : 0
+      if (d == 0) hue = 0
+      else if (mx == r) hue = 60 * ((g - b) / d); \
+      else if (mx == g) hue = 60 * ((b - r) / d + 2); \
+      else hue = 60 * ((r - g) / d + 4)
+      if (hue < 0) hue += 360
+    }
+    function hue_gap(a, b,   d) {
+      d = a - b; if (d < 0) d = -d
+      return d > 180 ? 360 - d : d
+    }
+    function signed_offset(h, base,   d) {
+      d = h - base
+      while (d <= -180) d += 360
+      while (d > 180) d -= 360
+      return d
+    }
+    /^[[:space:]]*(accent|red|orange|yellow|green|cyan|blue|magenta|brown)[[:space:]]*=/ {
+      key = $1
+      if (match($0, /#[0-9A-Fa-f]{6}/)) value[key] = tolower(substr($0, RSTART + 1, 6))
+    }
+    END {
+      if (!("accent" in value)) exit
+      analyse(value["accent"])
+      if (sat < 0.15) exit
+      accent_hue = hue
+
+      split("accent red orange yellow green cyan blue magenta brown", order, " ")
+      n = 0
+      for (i = 1; i <= 9; i++) {
+        key = order[i]
+        if (!(key in value)) continue
+        hex = value[key]
+        analyse(hex)
+        if (sat < 0.15) continue
+        dup = 0
+        for (j = 1; j <= n; j++)
+          if (hexes[j] == hex || hue_gap(hues[j], hue) < 10) { dup = 1; break }
+        if (dup) continue
+        n++; hexes[n] = hex; hues[n] = hue; gaps[n] = hue_gap(hue, accent_hue)
+      }
+      if (n < 2) exit
+
+      # Keep the accent (index 1) and the want-1 candidates nearest to it;
+      # ties fall to the earlier key. Then order by signed hue offset.
+      keep[1] = 1; kept = 1
+      while (kept < want && kept < n) {
+        best = 0
+        for (i = 2; i <= n; i++)
+          if (!(i in keep) && (best == 0 || gaps[i] < gaps[best])) best = i
+        keep[best] = 1; kept++
+      }
+      m = 0
+      for (i = 1; i <= n; i++)
+        if (i in keep) { m++; out[m] = hexes[i]; off[m] = signed_offset(hues[i], accent_hue) }
+      for (i = 2; i <= m; i++) {
+        h = out[i]; o = off[i]; j = i - 1
+        while (j >= 1 && off[j] > o) { out[j + 1] = out[j]; off[j + 1] = off[j]; j-- }
+        out[j + 1] = h; off[j + 1] = o
+      }
+      for (i = 1; i <= m; i++) print out[i]
+    }
+  ' "$THEME_DIR/colors.toml"
+}
+
 # The colours to light, one per line, already brightened.
 stops() {
-  local color
+  local color colors=()
 
-  color=$(single_color)
-  [[ -n $color ]] || return
-  brighten_color "$color"
+  if [[ $MODE == palette ]]; then
+    mapfile -t colors < <(palette_colors)
+  fi
+  if (( ${#colors[@]} < 2 )); then
+    color=$(single_color)
+    [[ -n $color ]] || return
+    colors=("$color")
+  fi
+
+  for color in "${colors[@]}"; do
+    brighten_color "$color"
+  done
 }
 
 if [[ ${1:-} == stops ]]; then
@@ -108,16 +202,20 @@ openrgb_call() {
 # a missing server or a slow scan never stalls the theme switch.
 devices=$(timeout "$OPENRGB_TIMEOUT" openrgb --list-devices 2>/dev/null || true)
 
-# One "<id>\t<mode>" line per device; mode is empty when it has no gradient.
-# Mode names with spaces are single-quoted by openrgb, so try a quoted
-# gradient first and fall back to a bare word.
-device_modes() {
+# One "<id>|<mode>|<leds>" line per device: mode is the device's own gradient
+# effect if it has one (single mode uses it), leds is how many LEDs it lists.
+# Mode and LED names with spaces are single-quoted by openrgb.
+device_info() {
   awk '
+    function flush() {
+      if (current != "") print current "|" mode "|" leds
+    }
     /^[0-9]+: / {
-      if (current != "") print current "\t" mode
+      flush()
       current = $1
       sub(/:$/, "", current)
       mode = ""
+      leds = 0
     }
     /^  Modes: / && current != "" {
       modes = substr($0, 9)
@@ -134,20 +232,73 @@ device_modes() {
         }
       }
     }
-    END { if (current != "") print current "\t" mode }
+    /^  LEDs: / && current != "" {
+      rest = substr($0, 8)
+      leds = gsub(/'"'"'[^'"'"']*'"'"'/, "", rest)
+      gsub(/^ +| +$/, "", rest)
+      if (rest != "") leds += split(rest, words, / +/)
+    }
+    END { flush() }
   ' <<<"$devices"
+}
+
+# Spread the stops over `count` LEDs by linear interpolation, printed as the
+# comma list `-c` takes. An unknown count sends the stops as they are.
+led_colors() {
+  local count="$1"
+
+  if (( count < 1 )); then
+    IFS=, ; echo "${STOPS[*]}"; return
+  fi
+
+  awk -v count="$count" -v stops="$(IFS=,; echo "${STOPS[*]}")" '
+    function hex_value(char) {
+      return index("0123456789abcdef", tolower(char)) - 1
+    }
+    function channel(hex, idx) {
+      return hex_value(substr(hex, idx, 1)) * 16 + hex_value(substr(hex, idx + 1, 1))
+    }
+    BEGIN {
+      k = split(stops, stop, ",")
+      for (i = 0; i < count; i++) {
+        t = count > 1 ? i / (count - 1) : 0.5
+        pos = t * (k - 1)
+        lo = int(pos); if (lo > k - 2) lo = k - 2; if (lo < 0) lo = 0
+        f = pos - lo
+        a = stop[lo + 1]; b = k > 1 ? stop[lo + 2] : a
+        r = int(channel(a, 1) * (1 - f) + channel(b, 1) * f + 0.5)
+        g = int(channel(a, 3) * (1 - f) + channel(b, 3) * f + 0.5)
+        bl = int(channel(a, 5) * (1 - f) + channel(b, 5) * f + 0.5)
+        printf "%s%02x%02x%02x", (i ? "," : ""), r, g, bl
+      }
+      printf "\n"
+    }
+  '
 }
 
 # Without a running OpenRGB server every CLI invocation re-probes all the
 # hardware, which takes seconds per call. `-d` may repeat within one command,
 # so every device is applied in a single invocation after the one detection.
+#
+# Single colour goes through a mode (`static`, or the device's own gradient)
+# so it persists in firmware. Palette colours are written per LED with no
+# mode: in the current mode the LEDs take the colours directly, and on the
+# hardware this was verified against they stay put.
 args=()
-while IFS=$'\t' read -r id mode; do
-  args+=(-d "$id" -m "${mode:-static}" -c "$color" -b "$BRIGHTNESS")
-done < <(device_modes)
+while IFS="|" read -r id mode leds; do
+  if (( ${#STOPS[@]} > 1 )); then
+    args+=(-d "$id" -c "$(led_colors "$leds")")
+  else
+    args+=(-d "$id" -m "${mode:-static}" -c "$color" -b "$BRIGHTNESS")
+  fi
+done < <(device_info)
 
 if (( ${#args[@]} == 0 )); then
-  args=(-m static -c "$color" -b "$BRIGHTNESS")
+  if (( ${#STOPS[@]} > 1 )); then
+    args=(-c "$(IFS=,; echo "${STOPS[*]}")")
+  else
+    args=(-m static -c "$color" -b "$BRIGHTNESS")
+  fi
 fi
 
 openrgb_call "${args[@]}"
