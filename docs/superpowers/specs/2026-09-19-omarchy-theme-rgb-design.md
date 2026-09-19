@@ -264,3 +264,10 @@ falls to vividness (HSL saturation, penalised away from mid lightness).
 Filters: saturation >= 15 %, lightness 15–90 %, near-duplicates skipped. The
 service polls the background symlink's target every five seconds and
 re-syncs when it changes.
+
+## Revision 11 — ambient devices show the accent alone
+
+Bands are for the desk (Keyboard, Mouse, Mousemat, Headset, HeadsetStand,
+Gamepad). Every other device is ambient light and lights the first colour —
+the accent — alone, in static mode, whatever the tier. `stops` prints
+`desk a,b,c` and `ambient a`.

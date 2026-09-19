@@ -158,9 +158,9 @@ fi
 # Pure hues at equal vividness and no wallpaper in this HOME: the accent
 # first, then the variables in their own order. Every device gets the list.
 
-# --- 3 colours: accent, then the theme's colours ---------------------------
+# --- 3 colours: accent, then the theme's colours; ambient gets the accent --
 set_config '{"mode": "palette", "colors": 3}'
-if [[ $(stops) == 0000ff,ff0000,ff8000 && $(stops ambient) == 0000ff,ff0000,ff8000 ]]; then
+if [[ $(stops) == 0000ff,ff0000,ff8000 && $(stops ambient) == 0000ff ]]; then
   pass "3 colours: accent, then the theme's colours"
 else
   fail "3 colours: accent, then the theme's colours" "$(stops) / $(stops ambient)"
@@ -170,10 +170,10 @@ fi
 set_config '{"mode": "palette", "colors": 5}'
 five=$(stops)
 set_config '{"mode": "palette", "colors": 8}'
-if [[ $five == 0000ff,ff0000,ff8000,ffff00,00ff00 && $(stops ambient) == 0000ff,ff0000,ff8000,ffff00,00ff00,00ffff,0080ff,ff00ff ]]; then
-  pass "5 and 8 colours carry on, on every device"
+if [[ $five == 0000ff,ff0000,ff8000,ffff00,00ff00 && $(stops) == 0000ff,ff0000,ff8000,ffff00,00ff00,00ffff,0080ff,ff00ff ]]; then
+  pass "5 and 8 colours carry on"
 else
-  fail "5 and 8 colours carry on, on every device" "$five / $(stops ambient)"
+  fail "5 and 8 colours carry on" "$five / $(stops)"
 fi
 
 # --- missing config means 5 colours ---------------------------------------
@@ -242,13 +242,13 @@ fi
 
 # --- a grey theme lights the accent alone ---------------------------------
 printf 'accent = "#8d8d8d"\nred = "#a4a4a4"\nblue = "#9b9b9b"\n' >"$theme/colors.toml"
-if [[ $(stops) == 8d8d8d && $(stops ambient) == 8d8d8d ]]; then
+if [[ $(stops) == 8d8d8d ]]; then
   pass "a grey theme lights the accent alone"
 else
   fail "a grey theme lights the accent alone" "$(stops) / $(stops ambient)"
 fi
 
-# --- every device gets the same colours in the one call --------------------
+# --- the desk gets the bands, everything else the accent, in one call -----
 cat >"$theme/colors.toml" <<'TOML'
 accent = "#0000ff"
 background = "#001000"
@@ -266,10 +266,10 @@ OPENRGB_LIST_DEVICES='0: ENE DRAM
   Type:           Keyboard
   Modes: [Direct] Static
   LEDs: a b c d e ' run_apply
-if called 'openrgb -d 0 -m direct -c 0000ff,0000ff,ffff00,00ff00,ff00ff -d 1 -m direct -c 0000ff,0000ff,ffff00,00ff00,ff00ff'; then
-  pass "every device gets the same colours in the one call"
+if called 'openrgb -d 0 -m static -c 0000ff -b 100 -d 1 -m direct -c 0000ff,0000ff,ffff00,00ff00,ff00ff'; then
+  pass "the desk gets the bands, everything else the accent, in one call"
 else
-  fail "every device gets the same colours in the one call" "$(cat "$calls")"
+  fail "the desk gets the bands, everything else the accent, in one call" "$(cat "$calls")"
 fi
 
 # --- failed detection broadcasts the colours ------------------------------
@@ -317,10 +317,10 @@ fi
 
 # --- custom mode lights the listed variables in their order, everywhere ---
 set_config '{"mode": "custom", "custom": ["cyan", "magenta", "red"]}'
-if [[ $(stops) == 00ffff,ff00ff,ff0000 && $(stops ambient) == 00ffff,ff00ff,ff0000 ]]; then
-  pass "custom mode lights the listed variables in their order, everywhere"
+if [[ $(stops) == 00ffff,ff00ff,ff0000 && $(stops ambient) == 00ffff ]]; then
+  pass "custom mode lights the listed variables in their order; ambient the first"
 else
-  fail "custom mode lights the listed variables in their order, everywhere" "$(stops) / $(stops ambient)"
+  fail "custom mode lights the listed variables in their order; ambient the first" "$(stops) / $(stops ambient)"
 fi
 
 # --- unknown custom variables are skipped, one left means that colour -----
@@ -341,7 +341,8 @@ fi
 
 # --- brightness scales every colour, in the preview and on the wire -------
 set_config '{"mode": "custom", "custom": ["cyan", "magenta"], "brightness": 50}'
-OPENRGB_LIST_DEVICES='0: Fake Strip
+OPENRGB_LIST_DEVICES='0: Fake Pad
+  Type:           Mousemat
   Modes: Direct Static
   LEDs: '"'"'LED 1'"'"' '"'"'LED 2'"'"'' run_apply
 if [[ $(stops) == 008080,800080 ]] && called 'openrgb -d 0 -m direct -c 008080,800080'; then
@@ -373,7 +374,8 @@ fi
 # --- bands: LEDs split evenly, remainder goes to the last colours ---------
 printf 'red = "#ff0000"\ngreen = "#00ff00"\nblue = "#0000ff"\n' >"$theme/colors.toml"
 set_config '{"mode": "custom", "custom": ["red", "green", "blue"]}'
-OPENRGB_LIST_DEVICES='0: Fake Strip
+OPENRGB_LIST_DEVICES='0: Fake Pad
+  Type:           Mousemat
   Modes: Direct
   LEDs: a b c d e f g' run_apply
 if called 'openrgb -d 0 -m direct -c ff0000,ff0000,ff0000,00ff00,00ff00,0000ff,0000ff'; then
@@ -436,15 +438,26 @@ else
   fail "zones on another device colour its OpenRGB zones in turn" "$(cat "$calls")"
 fi
 
-# --- rows on a strip is just the flow -------------------------------------
+# --- rows on a pad is just the flow ---------------------------------------
 set_config '{"mode": "custom", "custom": ["red", "green", "blue"], "layout": "rows"}'
-OPENRGB_LIST_DEVICES='0: Fake Strip
-  Type:           LEDStrip
+OPENRGB_LIST_DEVICES='0: Fake Pad
+  Type:           Mousemat
   LEDs: a b c d e f ' run_apply
 if called 'openrgb -d 0 -m static -c ff0000,ff0000,00ff00,00ff00,0000ff,0000ff'; then
-  pass "rows on a strip is just the flow"
+  pass "rows on a pad is just the flow"
 else
-  fail "rows on a strip is just the flow" "$(cat "$calls")"
+  fail "rows on a pad is just the flow" "$(cat "$calls")"
+fi
+
+# --- a strip is ambient: the first colour alone, whatever the tier ---------
+OPENRGB_LIST_DEVICES='0: Fake Strip
+  Type:           LEDStrip
+  Modes: Direct Static
+  LEDs: a b c d e f ' run_apply
+if called 'openrgb -d 0 -m static -c ff0000 -b 100'; then
+  pass "a strip is ambient: the first colour alone, whatever the tier"
+else
+  fail "a strip is ambient: the first colour alone, whatever the tier" "$(cat "$calls")"
 fi
 
 # --- empty matrix cells and the quote key keep their LED index ------------

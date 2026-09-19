@@ -41,6 +41,11 @@ LAYOUT=flow        # flow | rows | columns | zones
 # with no colour to speak of leaves the order to vividness. Greys, dark
 # tones and near-duplicates are skipped.
 BACKGROUND_LINK="$HOME/.local/state/omarchy/current/background"
+# The bands go on the desk — keyboard, mouse and the like. Everything else
+# (the screen's backlight, strips, RAM, motherboard, case) is ambient light
+# and shows the accent alone: one colour reads as the theme from across the
+# room; five bands on a monitor's backlight do not.
+DESK_TYPES="Keyboard Mouse Mousemat Headset HeadsetStand Gamepad"
 
 is_variable() { [[ " $VARIABLES " == *" $1 "* ]]; }
 
@@ -357,14 +362,14 @@ all_stops() {
   done
 }
 
-# "desk a,b,c" and "ambient a,b,c": every device gets the same list; both
-# lines stay for the panel, which reads them by name.
+# "desk a,b,c" and "ambient a": what the desk gets, and the one colour
+# everything else gets.
 stops() {
   local list
   list=$(all_stops | paste -sd,)
   [[ -n $list ]] || return
   echo "desk $list"
-  echo "ambient $list"
+  echo "ambient ${list%%,*}"
 }
 
 case ${1:-} in
@@ -543,7 +548,7 @@ device_info | awk -F'|' -v order="$DEVICE_TYPE_ORDER" '
 
 args=()
 while IFS="|" read -r id mode leds name type zones multi names; do
-  if (( ${#STOPS[@]} > 1 )); then
+  if (( ${#STOPS[@]} > 1 )) && [[ " $DESK_TYPES " == *" $type "* ]]; then
     # Several colours need the device in a per-LED mode: in static it keeps
     # one colour and quietly drops the rest, which is how a sync "fails".
     if [[ $LAYOUT == zones && $names != *"Key: "* ]] && (( zones > 1 )); then

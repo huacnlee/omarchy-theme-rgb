@@ -75,9 +75,11 @@ the colours the theme made saturated and mid-light are its character.
 A near-duplicate of a colour already taken (hue within 12°, saturation and
 lightness within 25 points) is skipped — most themes make the accent one of
 the named colours, and it lights once. *3*, *5* and *8* take the first that
-many, and every device takes the same order, so a one-LED motherboard and
-the first band of a screen's backlight show the accent, as the keyboard's
-first band does. A theme with fewer usable colours lights fewer; a grey
+many — on the desk. The keyboard, mouse, mousemat, headset and gamepad get
+the bands; everything else (the screen's backlight, strips, RAM,
+motherboard, case) is ambient light and shows the accent alone: one colour
+reads as the theme from across the room, five bands on a monitor's backlight
+do not. A theme with fewer usable colours lights fewer; a grey
 theme lights the accent alone. Changing the wallpaper re-syncs within a few
 seconds. The LEDs get the theme's exact hex values, scaled only by the
 brightness setting — no gamma, no mixing toward white.
