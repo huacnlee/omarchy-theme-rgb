@@ -155,60 +155,80 @@ fi
 # ==========================================================================
 # three, five and eight colours: the theme's own, ordered for contrast
 # ==========================================================================
-# Pure hues: accent 240°, red 0, orange 30, yellow 60, green 120, cyan 180,
-# blue 210, magenta 300, brown 270. Accent first, then always the hue
-# farthest from the previous: yellow, blue, orange, cyan, red, green,
-# magenta, brown. Every device gets the same list.
+# Pure hues at equal vividness and no wallpaper in this HOME: the accent
+# first, then the variables in their own order. Every device gets the list.
 
-# --- 3 colours: the accent, then the two most contrasting -----------------
+# --- 3 colours: accent, then the theme's colours ---------------------------
 set_config '{"mode": "palette", "colors": 3}'
-if [[ $(stops) == 0000ff,ffff00,0080ff && $(stops ambient) == 0000ff,ffff00,0080ff ]]; then
-  pass "3 colours: the accent, then the two most contrasting"
+if [[ $(stops) == 0000ff,ff0000,ff8000 && $(stops ambient) == 0000ff,ff0000,ff8000 ]]; then
+  pass "3 colours: accent, then the theme's colours"
 else
-  fail "3 colours: the accent, then the two most contrasting" "$(stops) / $(stops ambient)"
+  fail "3 colours: accent, then the theme's colours" "$(stops) / $(stops ambient)"
 fi
 
-# --- 5 colours carry on the same order, on every device -------------------
+# --- 5 and 8 colours carry on, on every device ----------------------------
 set_config '{"mode": "palette", "colors": 5}'
-if [[ $(stops) == 0000ff,ffff00,0080ff,ff8000,00ffff && $(stops ambient) == 0000ff,ffff00,0080ff,ff8000,00ffff ]]; then
-  pass "5 colours carry on the same order, on every device"
-else
-  fail "5 colours carry on the same order, on every device" "$(stops) / $(stops ambient)"
-fi
-
-# --- 8 colours ------------------------------------------------------------
+five=$(stops)
 set_config '{"mode": "palette", "colors": 8}'
-if [[ $(stops) == 0000ff,ffff00,0080ff,ff8000,00ffff,ff0000,00ff00,ff00ff ]]; then
-  pass "8 colours"
+if [[ $five == 0000ff,ff0000,ff8000,ffff00,00ff00 && $(stops ambient) == 0000ff,ff0000,ff8000,ffff00,00ff00,00ffff,0080ff,ff00ff ]]; then
+  pass "5 and 8 colours carry on, on every device"
 else
-  fail "8 colours" "$(stops)"
+  fail "5 and 8 colours carry on, on every device" "$five / $(stops ambient)"
 fi
 
 # --- missing config means 5 colours ---------------------------------------
 rm "$home/.config/omarchy/theme-rgb.json"
-if [[ $(stops) == 0000ff,ffff00,0080ff,ff8000,00ffff ]]; then
+if [[ $(stops) == 0000ff,ff0000,ff8000,ffff00,00ff00 ]]; then
   pass "missing config means 5 colours"
 else
   fail "missing config means 5 colours" "$(stops)"
 fi
 
+# --- with no wallpaper colour, the vivid come before the muted -------------
+# blue is full-strength, red dark but saturated, magenta pale: blue, red, magenta.
+printf 'accent = "#00ff00"\nred = "#602020"\nmagenta = "#c090c0"\nblue = "#0080ff"\n' >"$theme/colors.toml"
+set_config '{"mode": "palette", "colors": 5}'
+if [[ $(stops) == 00ff00,0080ff,602020,c090c0 ]]; then
+  pass "with no wallpaper colour, the vivid come before the muted"
+else
+  fail "with no wallpaper colour, the vivid come before the muted" "$(stops)"
+fi
+
+# --- the wallpaper's colours come first ------------------------------------
+# A mock magick reports a wallpaper that is mostly red with some blue.
+mkdir -p "$home/.local/state/omarchy/current" "$home/wall"
+printf 'not really an image\n' >"$home/wall/bg.png"
+ln -sfn "$home/wall/bg.png" "$home/.local/state/omarchy/current/background"
+cat >"$mock_bin/magick" <<'SH'
+#!/bin/bash
+printf '   7000: (200,30,30) #C81E1E srgb(200,30,30)\n   2000: (30,30,200) #1E1EC8 srgb(30,30,200)\n   1000: (20,20,20) #141414 srgb(20,20,20)\n'
+SH
+chmod +x "$mock_bin/magick"
+printf 'accent = "#00ff00"\nblue = "#0080ff"\nyellow = "#ffff00"\nred = "#ff4040"\n' >"$theme/colors.toml"
+if [[ $(stops) == 00ff00,ff4040,0080ff,ffff00 ]]; then
+  pass "the wallpaper's colours come first"
+else
+  fail "the wallpaper's colours come first" "$(stops)"
+fi
+rm "$mock_bin/magick" "$home/.local/state/omarchy/current/background"
+
 # --- greys and dark tones are left out ------------------------------------
 printf 'accent = "#0000ff"\nred = "#ff0000"\ncyan = "#808080"\ngreen = "#002200"\nyellow = "#ffff00"\n' >"$theme/colors.toml"
 set_config '{"mode": "palette", "colors": 5}'
-if [[ $(stops) == 0000ff,ffff00,ff0000 ]]; then
+if [[ $(stops) == 0000ff,ff0000,ffff00 ]]; then
   pass "greys and dark tones are left out"
 else
   fail "greys and dark tones are left out" "$(stops)"
 fi
 
-# --- near-duplicates collapse to one, the accent winning ------------------
-# blue and green sit on the accent; orange sits on yellow: three bands, not six.
+# --- near-duplicates collapse to one -------------------------------------
+# blue and green sit on the accent; yellow sits on orange: three bands, not six.
 printf 'accent = "#0000ff"\nblue = "#0010ff"\ngreen = "#1000ff"\nyellow = "#ffff00"\norange = "#fff000"\nred = "#ff0000"\n' >"$theme/colors.toml"
 set_config '{"mode": "palette", "colors": 8}'
-if [[ $(stops) == 0000ff,fff000,ff0000 ]]; then
-  pass "near-duplicates collapse to one, the accent winning"
+if [[ $(stops) == 0000ff,ff0000,fff000 ]]; then
+  pass "near-duplicates collapse to one"
 else
-  fail "near-duplicates collapse to one, the accent winning" "$(stops)"
+  fail "near-duplicates collapse to one" "$(stops)"
 fi
 
 # --- background and foreground never join a tier -------------------------
@@ -246,7 +266,7 @@ OPENRGB_LIST_DEVICES='0: ENE DRAM
   Type:           Keyboard
   Modes: [Direct] Static
   LEDs: a b c d e ' run_apply
-if called 'openrgb -d 0 -m direct -c 0000ff,0000ff,ffff00,ff00ff,00ff00 -d 1 -m direct -c 0000ff,0000ff,ffff00,ff00ff,00ff00'; then
+if called 'openrgb -d 0 -m direct -c 0000ff,0000ff,ffff00,00ff00,ff00ff -d 1 -m direct -c 0000ff,0000ff,ffff00,00ff00,ff00ff'; then
   pass "every device gets the same colours in the one call"
 else
   fail "every device gets the same colours in the one call" "$(cat "$calls")"
@@ -254,7 +274,7 @@ fi
 
 # --- failed detection broadcasts the colours ------------------------------
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" OPENRGB_LIST_FAIL=1 run_apply
-if called 'openrgb -c 0000ff,ffff00,ff00ff,00ff00'; then
+if called 'openrgb -c 0000ff,ffff00,00ff00,ff00ff'; then
   pass "failed detection broadcasts the colours"
 else
   fail "failed detection broadcasts the colours" "$(cat "$calls")"

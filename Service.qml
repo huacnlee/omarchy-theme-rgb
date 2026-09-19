@@ -252,6 +252,37 @@ Item {
     onFileChanged: root.onThemeChanged()
   }
 
+  // The order of the colours follows the wallpaper, and the wallpaper can
+  // change without the theme (omarchy-theme-bg-next swaps the symlink). A
+  // symlink swap is invisible to a file watch on the image, so poll the link
+  // target every few seconds; resolving a symlink costs nothing.
+  property string backgroundTarget: ""
+
+  Timer {
+    interval: 5000
+    repeat: true
+    running: true
+    triggeredOnStart: true
+    onTriggered: if (!backgroundProbe.running) backgroundProbe.running = true
+  }
+
+  Process {
+    id: backgroundProbe
+    command: ["readlink", "-f", root.home + "/.local/state/omarchy/current/background"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var target = String(text || "").trim()
+        if (target === root.backgroundTarget) return
+        var first = root.backgroundTarget === ""
+        root.backgroundTarget = target
+        // The first reading just records what is there; the startup sync
+        // already used it.
+        if (!first) { root.refreshStops(); root.apply() }
+      }
+    }
+  }
+
   Process {
     id: openrgbProbe
     command: ["bash", "-c", "command -v openrgb"]

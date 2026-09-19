@@ -59,22 +59,28 @@ once the package is in place.
 
 The candidates are the accent plus `red`, `orange`, `yellow`, `green`, `cyan`,
 `blue`, `magenta` and `brown` from the theme's `colors.toml` — never
-background or foreground, which would light as dark or colourless bands. Of
-those:
+background or foreground, which would light as dark or colourless bands.
+Greys (saturation under 15 %) and very dark or very light tones (lightness
+outside 15–90 %) are dropped.
 
-1. greys (saturation under 15 %) and dark tones (value under 30 %) are
-   dropped;
-2. near-duplicates (hue within 12°, saturation and value within 25 points)
-   collapse to one — the accent wins, else the more vivid;
-3. the accent comes first, then each next colour is the one whose hue is
-   farthest from the previous, so neighbouring bands contrast.
+The accent comes first: it is the theme's colour for borders, the prompt and
+selections. The rest are ordered by the **current wallpaper** — the biggest
+thing a theme shows. The wallpaper is reduced to twelve colour clusters
+(from a 160 px thumbnail, a tenth of a second) and each theme colour scores
+by how much of the wallpaper sits within 60° of its hue, so a purple city
+puts magenta before yellow and a jade forest puts cyan and green before
+red. A wallpaper with no colour to speak of leaves the order to vividness:
+the colours the theme made saturated and mid-light are its character.
 
-*3*, *5* and *8* take the first that many, and every device takes the same
-order — so a one-LED motherboard and the first band of a screen's backlight
-show the accent, as the keyboard's first band does. A theme with fewer
-usable colours lights fewer; a grey theme lights the accent alone. The LEDs get the theme's
-exact hex values, scaled only by the brightness setting — no gamma, no mixing
-toward white.
+A near-duplicate of a colour already taken (hue within 12°, saturation and
+lightness within 25 points) is skipped — most themes make the accent one of
+the named colours, and it lights once. *3*, *5* and *8* take the first that
+many, and every device takes the same order, so a one-LED motherboard and
+the first band of a screen's backlight show the accent, as the keyboard's
+first band does. A theme with fewer usable colours lights fewer; a grey
+theme lights the accent alone. Changing the wallpaper re-syncs within a few
+seconds. The LEDs get the theme's exact hex values, scaled only by the
+brightness setting — no gamma, no mixing toward white.
 
 Several colours always sit in contiguous bands with hard edges between them,
 never blended. Keyboard: `←`/`→` move within a row (on the brightness row

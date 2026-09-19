@@ -244,3 +244,23 @@ The desk/ambient split is gone: every device takes the same per-theme order,
 so a one-LED motherboard and the first band of a monitor's backlight show
 the accent like the keyboard's first band. `stops` still prints both lines,
 identical. The panel shows one preview strip.
+
+## Revision 9 — the order Omarchy uses colours
+
+Contrast ordering is replaced by a fixed semantic order drawn from how
+Omarchy's own interface uses the palette: accent (borders, prompt,
+selection), blue (folders, dates in `ls`), yellow (warnings, owners), green
+(executables, success), cyan (links), magenta (media, keywords), orange,
+brown, and red last because it means an error. The grey/dark filter and
+near-duplicate skip stay; the earlier colour in the order wins a duplicate.
+
+## Revision 10 — the wallpaper decides the order
+
+The fixed semantic order had no source behind it. The order now follows the
+current wallpaper: `magick` reduces it to twelve clusters; each candidate
+scores by wallpaper share within 60° of its hue, weighted by the cluster's
+saturation; the accent stays first; when no cluster has colour the order
+falls to vividness (HSL saturation, penalised away from mid lightness).
+Filters: saturation >= 15 %, lightness 15–90 %, near-duplicates skipped. The
+service polls the background symlink's target every five seconds and
+re-syncs when it changes.
