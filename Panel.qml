@@ -287,14 +287,10 @@ Panel {
             fontFamily: themeRgb.fontFamily
           }
 
-          Grid {
-            id: swatchGrid
+          Flow {
+            id: swatchFlow
             width: parent.width
-            columns: 5
-            columnSpacing: Style.space(6)
-            rowSpacing: Style.space(6)
-
-            readonly property real cellWidth: Math.floor((width - columnSpacing * (columns - 1)) / columns)
+            spacing: Style.space(6)
 
             Repeater {
               model: themeRgb.variables
@@ -308,8 +304,9 @@ Panel {
                 readonly property bool hot: themeRgb.cursorActive && themeRgb.cursorRow === "swatch" && themeRgb.cursorIndex === index
                 readonly property int customOrder: themeRgb.custom.indexOf(modelData.name)
 
-                width: swatchGrid.cellWidth
-                height: chip.height + label.implicitHeight + Style.space(14)
+                // Sized to its content, like a chip.
+                width: Style.space(8) + chip.width + Style.space(6) + label.implicitWidth + Style.space(8)
+                height: Style.spacing.controlHeight
 
                 // Quiet at rest; the shared hover and selected fills otherwise.
                 Rectangle {
@@ -324,11 +321,11 @@ Panel {
                 // The colour itself, as the theme defines it.
                 Rectangle {
                   id: chip
-                  anchors.top: parent.top
-                  anchors.topMargin: Style.space(6)
-                  anchors.horizontalCenter: parent.horizontalCenter
-                  width: Style.space(22)
-                  height: Style.space(22)
+                  anchors.left: parent.left
+                  anchors.leftMargin: Style.space(8)
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: Style.space(14)
+                  height: Style.space(14)
                   color: swatch.modelData.hex
                   border.width: 1
                   border.color: Qt.rgba(themeRgb.foreground.r, themeRgb.foreground.g, themeRgb.foreground.b, 0.25)
@@ -347,16 +344,13 @@ Panel {
 
                 Text {
                   id: label
-                  anchors.top: chip.bottom
-                  anchors.topMargin: Style.space(4)
-                  anchors.horizontalCenter: parent.horizontalCenter
-                  width: parent.width - Style.space(4)
-                  horizontalAlignment: Text.AlignHCenter
+                  anchors.left: chip.right
+                  anchors.leftMargin: Style.space(6)
+                  anchors.verticalCenter: parent.verticalCenter
                   text: swatch.modelData.name
-                  elide: Text.ElideRight
-                  color: swatch.selected ? themeRgb.foreground : themeRgb.dim
+                  color: themeRgb.foreground
                   font.family: themeRgb.fontFamily
-                  font.pixelSize: Style.font.caption
+                  font.pixelSize: Style.font.body
                   font.bold: swatch.selected
                 }
 
