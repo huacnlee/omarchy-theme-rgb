@@ -1,47 +1,37 @@
 #!/bin/bash
 
-# Apply the current Omarchy theme colour to every device OpenRGB manages.
-# Runs from Service.qml on theme change, or on its own as a theme-set hook.
-# Never fails the caller: anything missing is a silent no-op.
+# Apply the current Omarchy theme colours to every device OpenRGB manages.
+# Runs from Service.qml on theme or config change, or on its own as a
+# theme-set hook. Never fails the caller: anything missing is a silent no-op.
+#
+#   omarchy-theme-rgb-apply         apply to hardware
+#   omarchy-theme-rgb-apply stops   print the colours that would be used,
+#                                   one hex per line (no OpenRGB involved)
 
 THEME_DIR="$HOME/.local/state/omarchy/current/theme"
+CONFIG="$HOME/.config/omarchy/theme-rgb.json"
 OPENRGB_TIMEOUT=30
 
-# LEDs render the raw accent dim, so mix it toward white before applying and
-# run the devices at full brightness.
-BRIGHTEN_AMOUNT=0.4
+# LEDs render dark colours dim, so lift every colour a little toward white.
+# Kept small so the light still reads as the colour on screen.
+BRIGHTEN_AMOUNT=0.15
 BRIGHTNESS=100
 
-command -v openrgb >/dev/null 2>&1 || exit 0
+# --- configuration --------------------------------------------------------
 
-# A theme that ships keyboard.rgb chose that colour for keyboards, so honour it
-# (the built-in ASUS/Framework keyboard scripts read the same file). Most
-# themes do not, so fall back to the accent every theme has in colors.toml.
+MODE=palette
+COLORS=5
+
+if [[ -f $CONFIG ]] && command -v jq >/dev/null 2>&1; then
+  mode=$(jq -r '.mode // empty' "$CONFIG" 2>/dev/null)
+  colors=$(jq -r '.colors // empty' "$CONFIG" 2>/dev/null)
+  [[ $mode == single || $mode == palette ]] && MODE=$mode
+  [[ $colors == 2 || $colors == 3 || $colors == 5 ]] && COLORS=$colors
+fi
+
+# --- colour maths ---------------------------------------------------------
+
 valid_hex() { [[ $1 =~ ^[0-9A-Fa-f]{6}$ ]]; }
-
-theme_color() {
-  local value
-
-  if [[ -f $THEME_DIR/keyboard.rgb ]]; then
-    value=$(<"$THEME_DIR/keyboard.rgb")
-    value="${value#\#}"
-    if valid_hex "$value"; then
-      echo "$value"
-      return
-    fi
-  fi
-
-  if [[ -f $THEME_DIR/colors.toml ]]; then
-    value=$(sed -nE 's/^[[:space:]]*accent[[:space:]]*=[[:space:]]*"?#?([0-9A-Fa-f]{6})"?.*/\1/p' "$THEME_DIR/colors.toml" | head -n1)
-    if valid_hex "$value"; then
-      echo "$value"
-      return
-    fi
-  fi
-}
-
-color=$(theme_color)
-[[ -n $color ]] || exit 0
 
 brighten_color() {
   awk -v hex="$1" -v amount="$BRIGHTEN_AMOUNT" '
@@ -60,7 +50,54 @@ brighten_color() {
   '
 }
 
-color=$(brighten_color "$color")
+# Value of `<key> = "#rrggbb"` in colors.toml, or nothing.
+toml_color() {
+  [[ -f $THEME_DIR/colors.toml ]] || return
+  sed -nE 's/^[[:space:]]*'"$1"'[[:space:]]*=[[:space:]]*"?#?([0-9A-Fa-f]{6})"?.*/\1/p' "$THEME_DIR/colors.toml" | head -n1
+}
+
+# A theme that ships keyboard.rgb chose that colour for keyboards, so honour it
+# (the built-in ASUS/Framework keyboard scripts read the same file). Most
+# themes do not, so fall back to the accent every theme has in colors.toml.
+single_color() {
+  local value
+
+  if [[ -f $THEME_DIR/keyboard.rgb ]]; then
+    value=$(<"$THEME_DIR/keyboard.rgb")
+    value="${value#\#}"
+    if valid_hex "$value"; then
+      echo "$value"
+      return
+    fi
+  fi
+
+  value=$(toml_color accent)
+  if valid_hex "$value"; then
+    echo "$value"
+  fi
+}
+
+# The colours to light, one per line, already brightened.
+stops() {
+  local color
+
+  color=$(single_color)
+  [[ -n $color ]] || return
+  brighten_color "$color"
+}
+
+if [[ ${1:-} == stops ]]; then
+  stops
+  exit 0
+fi
+
+# --- apply ----------------------------------------------------------------
+
+command -v openrgb >/dev/null 2>&1 || exit 0
+
+mapfile -t STOPS < <(stops)
+(( ${#STOPS[@]} > 0 )) || exit 0
+color="${STOPS[0]}"
 
 openrgb_call() {
   timeout "$OPENRGB_TIMEOUT" openrgb "$@" >/dev/null 2>&1 || true

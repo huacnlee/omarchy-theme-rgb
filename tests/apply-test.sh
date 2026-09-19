@@ -43,6 +43,8 @@ run_apply() {
 }
 
 called() { grep -Fqx "$1" "$calls"; }
+set_config() { mkdir -p "$home/.config/omarchy"; printf '%s\n' "$1" >"$home/.config/omarchy/theme-rgb.json"; }
+stops() { HOME="$home" PATH="$mock_bin:$PATH" "$APPLY" stops; }
 call_count() { grep -c '^openrgb' "$calls" || true; }
 
 PLAIN_DEVICES='0: Logitech G512 RGB
@@ -50,13 +52,15 @@ PLAIN_DEVICES='0: Logitech G512 RGB
 1: Razer Basilisk V3
   Modes: [Direct] Off Static '"'"'Spectrum Cycle'"'"' Wave'
 
+set_config '{"mode": "single"}'
+
 # --- static accent reaches every detected device --------------------------
 printf '#7aa2f7\n' >"$theme/keyboard.rgb"
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
 # Without an OpenRGB server every CLI call re-probes the hardware (seconds
 # each), so all devices go out in one invocation after the one detection.
 if (( $(call_count) == 2 )) \
-  && called 'openrgb -d 0 -m static -c afc7fa -b 100 -d 1 -m static -c afc7fa -b 100'; then
+  && called 'openrgb -d 0 -m static -c 8eb0f8 -b 100 -d 1 -m static -c 8eb0f8 -b 100'; then
   pass "static accent reaches every detected device in one call"
 else
   fail "static accent reaches every detected device in one call" "$(cat "$calls")"
@@ -67,7 +71,7 @@ OPENRGB_LIST_DEVICES='0: Fake Board
   Modes: Direct Static Gradient Wave
 1: Other Pad
   Modes: [Direct] Off Static '"'"'Rainbow Gradient'"'"'' run_apply
-if called 'openrgb -d 0 -m Gradient -c afc7fa -b 100 -d 1 -m Rainbow Gradient -c afc7fa -b 100'; then
+if called 'openrgb -d 0 -m Gradient -c 8eb0f8 -b 100 -d 1 -m Rainbow Gradient -c 8eb0f8 -b 100'; then
   pass "gradient-capable devices prefer their gradient mode"
 else
   fail "gradient-capable devices prefer their gradient mode" "$(cat "$calls")"
@@ -75,7 +79,7 @@ fi
 
 # --- failed detection falls back to a static broadcast --------------------
 if OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" OPENRGB_LIST_FAIL=1 run_apply \
-  && called 'openrgb -m static -c afc7fa -b 100'; then
+  && called 'openrgb -m static -c 8eb0f8 -b 100'; then
   pass "failed detection falls back to a static broadcast"
 else
   fail "failed detection falls back to a static broadcast" "$(cat "$calls")"
@@ -85,7 +89,7 @@ fi
 rm "$theme/keyboard.rgb"
 printf 'mode = "dark"\n\naccent = "#cba6f7"\nselection = "#313244"\n' >"$theme/colors.toml"
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
-if called 'openrgb -d 0 -m static -c e0cafa -b 100 -d 1 -m static -c e0cafa -b 100' && ! grep -q cba6f7 "$calls"; then
+if called 'openrgb -d 0 -m static -c d3b3f8 -b 100 -d 1 -m static -c d3b3f8 -b 100' && ! grep -q cba6f7 "$calls"; then
   pass "missing keyboard.rgb falls back to the colors.toml accent"
 else
   fail "missing keyboard.rgb falls back to the colors.toml accent" "$(cat "$calls")"
@@ -94,7 +98,7 @@ fi
 # --- keyboard.rgb wins over the accent when both exist --------------------
 printf '#7aa2f7\n' >"$theme/keyboard.rgb"
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
-if called 'openrgb -d 0 -m static -c afc7fa -b 100 -d 1 -m static -c afc7fa -b 100'; then
+if called 'openrgb -d 0 -m static -c 8eb0f8 -b 100 -d 1 -m static -c 8eb0f8 -b 100'; then
   pass "keyboard.rgb wins over the accent when both exist"
 else
   fail "keyboard.rgb wins over the accent when both exist" "$(cat "$calls")"
@@ -113,7 +117,7 @@ fi
 printf 'not-a-color\n' >"$theme/keyboard.rgb"
 printf 'accent = "#cba6f7"\n' >"$theme/colors.toml"
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
-if called 'openrgb -d 0 -m static -c e0cafa -b 100 -d 1 -m static -c e0cafa -b 100'; then
+if called 'openrgb -d 0 -m static -c d3b3f8 -b 100 -d 1 -m static -c d3b3f8 -b 100'; then
   pass "an invalid keyboard.rgb is skipped in favour of the accent"
 else
   fail "an invalid keyboard.rgb is skipped in favour of the accent" "$(cat "$calls")"
@@ -138,6 +142,14 @@ if HOME="$home" CALL_LOG="$calls" PATH="$no_openrgb" /bin/bash "$APPLY" && [[ ! 
   pass "a missing openrgb binary is a silent no-op"
 else
   fail "a missing openrgb binary is a silent no-op" "$(cat "$calls")"
+fi
+
+# --- stops prints the single colour without touching openrgb --------------
+: >"$calls"
+if [[ $(stops) == 8eb0f8 && ! -s $calls ]]; then
+  pass "stops prints the single colour without touching openrgb"
+else
+  fail "stops prints the single colour without touching openrgb" "$(stops; cat "$calls")"
 fi
 
 echo
