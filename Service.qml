@@ -98,7 +98,7 @@ Item {
     var list = cls === "ambient"
       ? (ambientRoles.length > 0 ? ambientRoles : defaultAmbientRoles)
       : (deskRoles.length > 0 ? deskRoles : defaultDeskRoles)
-    return colors > 3 ? list.filter(function(v) { return v !== "accent" }) : list
+    return list.filter(function(v) { return v !== "background" && v !== "foreground" && (colors <= 3 || v !== "accent") })
   }
 
   // Make `name` the first role of a class; the rest keep their order.

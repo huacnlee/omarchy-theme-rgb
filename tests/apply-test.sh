@@ -201,6 +201,14 @@ else
   fail "a missing variable and a repeated hex are skipped, the next moves up" "$(stops)"
 fi
 
+# --- background and foreground never join a tier, whatever the roles say --
+set_config '{"mode": "palette", "colors": 3, "roles": {"desk": ["background", "foreground", "accent", "red", "yellow"]}}'
+if [[ $(stops) == 0000ff,ff0000,ffff00 ]]; then
+  pass "background and foreground never join a tier, whatever the roles say"
+else
+  fail "background and foreground never join a tier, whatever the roles say" "$(stops)"
+fi
+
 # --- the role order comes from the config when it says so -----------------
 set_config '{"mode": "palette", "colors": 3, "roles": {"desk": ["red", "yellow", "accent"], "ambient": ["yellow", "red"]}}'
 if [[ $(stops) == ff0000,ffff00,0000ff && $(stops ambient) == ffff00,ff0000 ]]; then

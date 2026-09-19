@@ -215,6 +215,9 @@ role_colors() {
   local roles="$1" count="$2" name hex taken=" " n=0
   for name in $roles; do
     is_variable "$name" || continue
+    # Never the background or foreground, whatever the list says: near black
+    # and near white make dark or colourless bands.
+    [[ $name == background || $name == foreground ]] && continue
     [[ $name == accent ]] && (( count > 3 )) && continue
     hex=$(variable_color "$name")
     [[ -n $hex && $taken != *" $hex "* ]] || continue
