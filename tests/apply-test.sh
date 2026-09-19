@@ -79,8 +79,9 @@ PLAIN_DEVICES='0: Logitech G512 RGB
 set_config '{"mode": "single"}'
 
 # --- single mode is the accent on every device, in one static call --------
+# Three calls: detection, the apply, and the listing that checks it took.
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
-if (( $(call_count) == 2 )) \
+if (( $(call_count) == 3 )) \
   && called 'openrgb -d 0 -m static -c 0000ff -b 100 -d 1 -m static -c 0000ff -b 100'; then
   pass "single mode is the accent on every device, in one static call"
 else
@@ -496,6 +497,60 @@ elif grep -q 'device went away' "$log_file" 2>/dev/null; then
   pass "a failing openrgb call is reported, not swallowed"
 else
   fail "a failing openrgb call is reported, not swallowed" "$(cat "$log_file" 2>&1)"
+fi
+
+# --- a device that did not take its mode is sent again on its own ---------
+# The mock reports device 1 still in Static after the apply; the script
+# checks and re-sends that device alone, then reports success.
+cat >"$mock_bin/openrgb" <<'SH'
+#!/bin/bash
+printf 'openrgb %s\n' "$*" >>"$CALL_LOG"
+if [[ $* == *"--list-devices"* ]]; then
+  [[ ${OPENRGB_LIST_FAIL:-0} == 1 ]] && exit 1
+  n=$(grep -c -- '--list-devices' "$CALL_LOG")
+  # the first listing is detection; the second, the check after the apply
+  if (( n >= 2 )) && [[ -n ${OPENRGB_AFTER:-} ]]; then printf '%s\n' "$OPENRGB_AFTER"; else printf '%s\n' "$OPENRGB_LIST_DEVICES"; fi
+  exit 0
+fi
+[[ ${OPENRGB_APPLY_FAIL:-0} == 1 ]] && { echo "device went away" >&2; exit 3; }
+exit 0
+SH
+set_config '{"mode": "custom", "custom": ["red", "green", "blue"]}'
+KB='0: Razer Blackwidow V3
+  Type:           Keyboard
+  Modes: [Direct] Static
+  LEDs: a b c
+1: Razer Basilisk V3
+  Type:           Mouse
+  Modes: Direct [Static]
+  LEDs: a b c'
+export OPENRGB_AFTER='0: Razer Blackwidow V3
+  Type:           Keyboard
+  Modes: [Direct] Static
+  LEDs: a b c
+1: Razer Basilisk V3
+  Type:           Mouse
+  Modes: Direct [Static]
+  LEDs: a b c'
+if OPENRGB_LIST_DEVICES="$KB" run_apply \
+  && called 'openrgb -d 0 -m direct -c ff0000,00ff00,0000ff -d 1 -m direct -c ff0000,00ff00,0000ff' \
+  && called 'openrgb -d 1 -m direct -c ff0000,00ff00,0000ff' \
+  && (( $(grep -c -- '-d 0 -m direct' "$calls") == 1 )); then
+  pass "a device that did not take its mode is sent again on its own"
+else
+  fail "a device that did not take its mode is sent again on its own" "$(cat "$calls")"
+fi
+unset OPENRGB_AFTER
+
+# --- a device that took its mode is not sent twice ------------------------
+OPENRGB_LIST_DEVICES='0: Razer Blackwidow V3
+  Type:           Keyboard
+  Modes: [Direct] Static
+  LEDs: a b c' run_apply
+if (( $(grep -c -- '-d 0 -m direct' "$calls") == 1 )) && (( $(call_count) == 3 )); then
+  pass "a device that took its mode is not sent twice"
+else
+  fail "a device that took its mode is not sent twice" "$(cat "$calls")"
 fi
 
 # --- every apply records the devices it found, desk peripherals first ------

@@ -546,23 +546,33 @@ device_info | awk -F'|' -v order="$DEVICE_TYPE_ORDER" '
   { r = ($5 in rank) ? rank[$5] : n + 1; printf "%03d %03d %s|%s|%s|%s\n", r, NR, $1, $4, $3, $5 }
 ' | sort | cut -d' ' -f3- >"$DEVICES_FILE"
 
+# Per device: the arguments it gets and the mode it should end up in, so a
+# device that missed the apply can be sent again on its own.
+declare -A DEVICE_ARGS DEVICE_MODE
+DEVICE_IDS=()
 args=()
 while IFS="|" read -r id mode leds name type zones multi names; do
+  local_args=()
   if (( ${#STOPS[@]} > 1 )) && [[ " $DESK_TYPES " == *" $type "* ]]; then
     # Several colours need the device in a per-LED mode: in static it keeps
     # one colour and quietly drops the rest, which is how a sync "fails".
     if [[ $LAYOUT == zones && $names != *"Key: "* ]] && (( zones > 1 )); then
       # Not a keyboard: one colour per OpenRGB zone, cycling through the stops.
-      args+=(-d "$id" -m "$multi")
+      local_args=(-d "$id" -m "$multi")
       for (( z = 0; z < zones; z++ )); do
-        args+=(-z "$z" -c "${STOPS[z % ${#STOPS[@]}]}")
+        local_args+=(-z "$z" -c "${STOPS[z % ${#STOPS[@]}]}")
       done
     else
-      args+=(-d "$id" -m "$multi" -c "$(led_colors "$leds" "$names")")
+      local_args=(-d "$id" -m "$multi" -c "$(led_colors "$leds" "$names")")
     fi
+    DEVICE_MODE[$id]=$multi
   else
-    args+=(-d "$id" -m "${mode:-static}" -c "${STOPS[0]}" -b 100)
+    local_args=(-d "$id" -m "${mode:-static}" -c "${STOPS[0]}" -b 100)
+    DEVICE_MODE[$id]=${mode:-static}
   fi
+  DEVICE_ARGS[$id]="${local_args[*]}"
+  DEVICE_IDS+=("$id")
+  args+=("${local_args[@]}")
 done < <(device_info)
 
 if (( ${#args[@]} == 0 )); then
@@ -574,4 +584,29 @@ if (( ${#args[@]} == 0 )); then
 fi
 
 mkdir -p "$(dirname "$LOG_FILE")"
-openrgb_call "${args[@]}"
+openrgb_call "${args[@]}" || exit $?
+
+# Check that every device took its mode (the bracketed one in the listing —
+# cheap with the server up) and send the ones that did not once more, alone.
+# A write now and then goes missing on a busy USB device; this is what
+# makes the difference between "synced" and "one device stayed as it was".
+(( ${#DEVICE_IDS[@]} > 0 )) || exit 0
+after=$(timeout "$OPENRGB_TIMEOUT" openrgb --list-devices 2>/dev/null || true)
+[[ -n $after ]] || exit 0
+retry=()
+while IFS="|" read -r id active; do
+  [[ -n ${DEVICE_MODE[$id]:-} && -n $active ]] || continue
+  if [[ ${active,,} != "${DEVICE_MODE[$id],,}" ]]; then
+    # shellcheck disable=SC2206
+    retry+=(${DEVICE_ARGS[$id]})
+  fi
+done < <(awk '
+  /^[0-9]+: / { current = $1; sub(/:$/, "", current) }
+  /^  Modes: / && current != "" {
+    active = ""
+    if (match($0, /\[[^]]*\]/)) { active = substr($0, RSTART + 1, RLENGTH - 2); gsub(/\047/, "", active) }
+    print current "|" active
+  }
+' <<<"$after")
+(( ${#retry[@]} == 0 )) && exit 0
+openrgb_call "${retry[@]}"
