@@ -26,7 +26,12 @@ The plugin runs as a service inside `omarchy-shell` and puts a palette glyph
 in the bar. It syncs once when the shell starts and again every time
 `omarchy theme set` finishes or you change a setting.
 
-Remove it with `omarchy plugin remove huacnlee.theme_rgb`.
+Remove it with `omarchy plugin remove huacnlee.theme_rgb`. That also stops
+the headless OpenRGB server the plugin keeps; the `openrgb` package stays
+installed until you remove it yourself.
+
+Dependencies: the `openrgb` package (the panel offers to install it), plus
+`jq` and ImageMagick's `magick`, which Omarchy ships. Nothing else.
 
 ## The panel
 
