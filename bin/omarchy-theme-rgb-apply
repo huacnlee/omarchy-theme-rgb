@@ -16,6 +16,8 @@ CONFIG="$HOME/.config/omarchy/theme-rgb.json"
 # panel: what sits on the desk first, then the screen, then what is in the
 # case.
 DEVICES_FILE="$HOME/.local/state/omarchy/theme-rgb/devices"
+# What openrgb said on the last apply, for a look when a sync went wrong.
+LOG_FILE="$HOME/.local/state/omarchy/theme-rgb/last-apply.log"
 DEVICE_TYPE_ORDER="Keyboard Mouse Mousemat Headset HeadsetStand Gamepad Monitor Speaker Light LEDStrip Motherboard DRAM GPU Cooler Case Storage Accessory"
 OPENRGB_TIMEOUT=30
 
@@ -359,18 +361,22 @@ mapfile -t STOPS < <(stops)
 (( ${#STOPS[@]} > 0 )) || exit 0
 color="${STOPS[0]}"
 
+# Runs openrgb with its output kept in the log; the exit status is the
+# caller's to report (124 is the timeout).
 openrgb_call() {
-  timeout "$OPENRGB_TIMEOUT" openrgb "$@" >/dev/null 2>&1 || true
+  timeout "$OPENRGB_TIMEOUT" openrgb "$@" >"$LOG_FILE" 2>&1
 }
 
 # Detection runs once and every apply is bounded, so a missing server or a
 # slow scan never stalls the theme switch.
 devices=$(timeout "$OPENRGB_TIMEOUT" openrgb --list-devices 2>/dev/null || true)
 
-# One "<id>|<mode>|<leds>|<name>|<type>|<zones>|<led names>" line per device:
-# mode is the device's own gradient effect if it has one (single mode uses
-# it), leds is how many LEDs it lists, zones how many zones, and the LED
-# names follow separated by tabs. openrgb prints every LED name followed by a
+# One "<id>|<mode>|<leds>|<name>|<type>|<zones>|<multi>|<led names>" line per
+# device: mode is the device's own gradient effect if it has one (single mode
+# uses it), leds is how many LEDs it lists, zones how many zones, multi the
+# mode several colours are written in (Direct where the device offers it —
+# per-LED colours are only honoured there — else static), and the LED names
+# follow separated by tabs. openrgb prints every LED name followed by a
 # space, single-quoting names with spaces and printing nothing for a blank
 # matrix cell, so the tokens are counted exactly: a blank still owns an index.
 # The quote key prints as 'Key: '' and is put back together.
@@ -401,7 +407,7 @@ device_info() {
       return out
     }
     function flush() {
-      if (current != "") print current "|" mode "|" leds "|" name "|" type "|" zones "|" names
+      if (current != "") print current "|" mode "|" leds "|" name "|" type "|" zones "|" multi "|" names
     }
     /^[0-9]+: / {
       flush()
@@ -412,6 +418,7 @@ device_info() {
       leds = 0
       type = ""
       zones = 0
+      multi = "static"
       names = ""
     }
     /^  Type: / && current != "" {
@@ -420,6 +427,7 @@ device_info() {
     /^  Modes: / && current != "" {
       modes = substr($0, 9)
       gsub(/[\[\]]/, "", modes)
+      if (match(" " modes " ", / [Dd]irect /)) multi = "direct"
       if (match(modes, /\047[^\047]*[Gg]radient[^\047]*\047/)) {
         mode = substr(modes, RSTART + 1, RLENGTH - 2)
       } else {
@@ -516,16 +524,18 @@ device_info | awk -F'|' -v order="$DEVICE_TYPE_ORDER" '
 ' | sort | cut -d' ' -f3- >"$DEVICES_FILE"
 
 args=()
-while IFS="|" read -r id mode leds name type zones names; do
+while IFS="|" read -r id mode leds name type zones multi names; do
   if (( ${#STOPS[@]} > 1 )); then
+    # Several colours need the device in a per-LED mode: in static it keeps
+    # one colour and quietly drops the rest, which is how a sync "fails".
     if [[ $LAYOUT == zones && $names != *"Key: "* ]] && (( zones > 1 )); then
       # Not a keyboard: one colour per OpenRGB zone, cycling through the stops.
-      args+=(-d "$id")
+      args+=(-d "$id" -m "$multi")
       for (( z = 0; z < zones; z++ )); do
         args+=(-z "$z" -c "${STOPS[z % ${#STOPS[@]}]}")
       done
     else
-      args+=(-d "$id" -c "$(led_colors "$leds" "$names")")
+      args+=(-d "$id" -m "$multi" -c "$(led_colors "$leds" "$names")")
     fi
   else
     args+=(-d "$id" -m "${mode:-static}" -c "$color" -b 100)
@@ -540,6 +550,5 @@ if (( ${#args[@]} == 0 )); then
   fi
 fi
 
+mkdir -p "$(dirname "$LOG_FILE")"
 openrgb_call "${args[@]}"
-
-exit 0

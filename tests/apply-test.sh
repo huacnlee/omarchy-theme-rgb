@@ -38,7 +38,7 @@ fail() {
 run_apply() {
   : >"$calls"
   HOME="$home" CALL_LOG="$calls" \
-    OPENRGB_LIST_DEVICES="${OPENRGB_LIST_DEVICES:-}" OPENRGB_LIST_FAIL="${OPENRGB_LIST_FAIL:-0}" \
+    OPENRGB_LIST_DEVICES="${OPENRGB_LIST_DEVICES:-}" OPENRGB_LIST_FAIL="${OPENRGB_LIST_FAIL:-0}" OPENRGB_APPLY_FAIL="${OPENRGB_APPLY_FAIL:-0}" \
     PATH="${1:-}${1:+:}$mock_bin:$PATH" "$APPLY"
 }
 
@@ -204,7 +204,7 @@ OPENRGB_LIST_DEVICES='0: Fake Strip
 1: Fake Logo
   Modes: [Direct] Static
   LEDs: Logo' run_apply
-if (( $(call_count) == 2 )) && called 'openrgb -d 0 -c 0000ff,0000ff,8000ff -d 1 -c 0000ff'; then
+if (( $(call_count) == 2 )) && called 'openrgb -d 0 -m direct -c 0000ff,0000ff,8000ff -d 1 -m direct -c 0000ff'; then
   pass "palette colours fill each device's LEDs in clean bands"
 else
   fail "palette colours fill each device's LEDs in clean bands" "$(cat "$calls")"
@@ -324,7 +324,7 @@ set_config '{"mode": "custom", "custom": ["cyan", "magenta"], "brightness": 50}'
 OPENRGB_LIST_DEVICES='0: Fake Strip
   Modes: Direct Static
   LEDs: '"'"'LED 1'"'"' '"'"'LED 2'"'"'' run_apply
-if [[ $(stops | paste -sd,) == 008080,800080 ]] && called 'openrgb -d 0 -c 008080,800080'; then
+if [[ $(stops | paste -sd,) == 008080,800080 ]] && called 'openrgb -d 0 -m direct -c 008080,800080'; then
   pass "brightness scales every colour, in the preview and on the wire"
 else
   fail "brightness scales every colour, in the preview and on the wire" "$(stops | paste -sd,); $(cat "$calls")"
@@ -344,7 +344,7 @@ set_config '{"mode": "custom", "custom": ["red", "green", "blue"]}'
 OPENRGB_LIST_DEVICES='0: Fake Strip
   Modes: Direct
   LEDs: a b c d e f g' run_apply
-if called 'openrgb -d 0 -c ff0000,ff0000,ff0000,00ff00,00ff00,0000ff,0000ff'; then
+if called 'openrgb -d 0 -m direct -c ff0000,ff0000,ff0000,00ff00,00ff00,0000ff,0000ff'; then
   pass "bands: LEDs split evenly, remainder goes to the last colours"
 else
   fail "bands: LEDs split evenly, remainder goes to the last colours" "$(cat "$calls")"
@@ -364,7 +364,7 @@ set_config '{"mode": "custom", "custom": ["red", "green", "blue"], "layout": "ro
 # Space is on the bottom row, Escape the top, A the home row, 1 the number
 # row, Z the shift row, Q the qwerty row — nothing like their LED order.
 OPENRGB_LIST_DEVICES="$KEYBOARD" run_apply
-if called 'openrgb -d 4 -c 0000ff,ff0000,00ff00,ff0000,0000ff,00ff00'; then
+if called 'openrgb -d 4 -m direct -c 0000ff,ff0000,00ff00,ff0000,0000ff,00ff00'; then
   pass "rows: the six key rows split top to bottom"
 else
   fail "rows: the six key rows split top to bottom" "$(cat "$calls")"
@@ -377,7 +377,7 @@ OPENRGB_LIST_DEVICES='4: Razer Blackwidow V3
   LEDs: '"'"'Key: Number Pad .'"'"' '"'"'Key: Escape'"'"' '"'"'Key: Right Shift'"'"' '"'"'Key: G'"'"' ' run_apply
 # Numpad on the far right, Escape far left, Right Shift past the middle, G
 # in the left third.
-if called 'openrgb -d 4 -c 0000ff,ff0000,00ff00,ff0000'; then
+if called 'openrgb -d 4 -m static -c 0000ff,ff0000,00ff00,ff0000'; then
   pass "columns: keys split left to right by their position"
 else
   fail "columns: keys split left to right by their position" "$(cat "$calls")"
@@ -388,7 +388,7 @@ set_config '{"mode": "custom", "custom": ["red", "green", "blue"], "layout": "zo
 OPENRGB_LIST_DEVICES='4: Razer Blackwidow V3
   Type:           Keyboard
   LEDs: '"'"'Key: F1'"'"' '"'"'Key: A'"'"' '"'"'Key: Left Shift'"'"' '"'"'Key: Home'"'"' '"'"'Key: Number Pad 7'"'"' Logo ' run_apply
-if called 'openrgb -d 4 -c ff0000,00ff00,0000ff,ff0000,00ff00,0000ff'; then
+if called 'openrgb -d 4 -m static -c ff0000,00ff00,0000ff,ff0000,00ff00,0000ff'; then
   pass "zones: function keys, main block, modifiers, navigation, numpad, logo"
 else
   fail "zones: function keys, main block, modifiers, navigation, numpad, logo" "$(cat "$calls")"
@@ -399,7 +399,7 @@ OPENRGB_LIST_DEVICES='3: Razer Basilisk V3
   Type:           Mouse
   Zones: Logo '"'"'Scroll Wheel'"'"' '"'"'LED Strip'"'"'
   LEDs: Logo '"'"'Scroll Wheel'"'"' '"'"'LED Strip LED 1'"'"' '"'"'LED Strip LED 2'"'"' ' run_apply
-if called 'openrgb -d 3 -z 0 -c ff0000 -z 1 -c 00ff00 -z 2 -c 0000ff'; then
+if called 'openrgb -d 3 -m static -z 0 -c ff0000 -z 1 -c 00ff00 -z 2 -c 0000ff'; then
   pass "zones on another device colour its OpenRGB zones in turn"
 else
   fail "zones on another device colour its OpenRGB zones in turn" "$(cat "$calls")"
@@ -410,7 +410,7 @@ set_config '{"mode": "custom", "custom": ["red", "green", "blue"], "layout": "ro
 OPENRGB_LIST_DEVICES='0: Fake Strip
   Type:           LEDStrip
   LEDs: a b c d e f ' run_apply
-if called 'openrgb -d 0 -c ff0000,ff0000,00ff00,00ff00,0000ff,0000ff'; then
+if called 'openrgb -d 0 -m static -c ff0000,ff0000,00ff00,00ff00,0000ff,0000ff'; then
   pass "rows on a strip is just the flow"
 else
   fail "rows on a strip is just the flow" "$(cat "$calls")"
@@ -423,7 +423,7 @@ OPENRGB_LIST_DEVICES='4: Razer Blackwidow V3
 # Index 0 and 2 are blank cells (they take the flow colour for their index),
 # Space at 1 is the bottom row, the quote key at 3 the home row, Escape at 4
 # the top row.
-if called 'openrgb -d 4 -c ff0000,0000ff,00ff00,00ff00,ff0000'; then
+if called 'openrgb -d 4 -m static -c ff0000,0000ff,00ff00,00ff00,ff0000'; then
   pass "empty matrix cells and the quote key keep their LED index"
 else
   fail "empty matrix cells and the quote key keep their LED index" "$(cat "$calls")"
@@ -433,12 +433,33 @@ fi
 OPENRGB_LIST_DEVICES='4: Some Keyboard
   Type:           Keyboard
   LEDs: '"'"'Key: Escape'"'"' '"'"'Key: Mystery'"'"' '"'"'Key: Space'"'"' ' run_apply
-if called 'openrgb -d 4 -c ff0000,00ff00,0000ff'; then
+if called 'openrgb -d 4 -m static -c ff0000,00ff00,0000ff'; then
   pass "an unknown key name falls back to its flow position"
 else
   fail "an unknown key name falls back to its flow position" "$(cat "$calls")"
 fi
 set_config '{"mode": "custom", "custom": ["red", "green", "blue"]}'
+
+# --- a failing openrgb call is reported, not swallowed ---------------------
+cat >"$mock_bin/openrgb" <<'SH'
+#!/bin/bash
+printf 'openrgb %s\n' "$*" >>"$CALL_LOG"
+if [[ $* == *"--list-devices"* ]]; then
+  [[ ${OPENRGB_LIST_FAIL:-0} == 1 ]] && exit 1
+  printf '%s\n' "$OPENRGB_LIST_DEVICES"
+  exit 0
+fi
+[[ ${OPENRGB_APPLY_FAIL:-0} == 1 ]] && { echo "device went away" >&2; exit 3; }
+exit 0
+SH
+log_file="$home/.local/state/omarchy/theme-rgb/last-apply.log"
+if OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" OPENRGB_APPLY_FAIL=1 run_apply; then
+  fail "a failing openrgb call is reported, not swallowed" "exit 0"
+elif grep -q 'device went away' "$log_file" 2>/dev/null; then
+  pass "a failing openrgb call is reported, not swallowed"
+else
+  fail "a failing openrgb call is reported, not swallowed" "$(cat "$log_file" 2>&1)"
+fi
 
 # --- every apply records the devices it found, desk peripherals first ------
 devices_file="$home/.local/state/omarchy/theme-rgb/devices"

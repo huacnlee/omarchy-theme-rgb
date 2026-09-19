@@ -387,18 +387,41 @@ Item {
     }
   }
 
+  // A failed apply (openrgb exited non-zero or timed out, see
+  // ~/.local/state/omarchy/theme-rgb/last-apply.log) gets one retry after a
+  // pause: a device re-enumerating or a busy SDK server is usually over by
+  // then. A second failure stays reported until something changes.
+  property bool applyRetried: false
+
+  Timer {
+    id: applyRetryTimer
+    interval: 3000
+    repeat: false
+    onTriggered: root.apply()
+  }
+
   Process {
     id: applyProcess
     command: ["bash", root.applyScript]
     onExited: function(exitCode) {
       root.syncing = false
       root.lastSyncFailed = exitCode !== 0
-      if (exitCode !== 0) console.warn("huacnlee.theme_rgb: apply exited with " + exitCode)
       devicesFile.reload()
       if (root.applyPending) {
         root.applyPending = false
+        root.applyRetried = false
         root.apply()
+        return
       }
+      if (exitCode !== 0) {
+        console.warn("huacnlee.theme_rgb: apply exited with " + exitCode + (root.applyRetried ? "" : ", retrying"))
+        if (!root.applyRetried) {
+          root.applyRetried = true
+          applyRetryTimer.restart()
+        }
+        return
+      }
+      root.applyRetried = false
     }
   }
 
