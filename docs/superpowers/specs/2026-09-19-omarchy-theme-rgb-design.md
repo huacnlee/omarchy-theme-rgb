@@ -124,3 +124,29 @@ from `variables`; single-select for Single and as the anchor for 2/3/5,
 multi-select in click order for Custom), BRIGHTNESS (slider 10–100), and the
 preview strip drawn as bands. Keyboard: ←/→ within a row, ↑/↓ between rows,
 Enter selects, `1`–`5` pick a mode, `r` syncs.
+
+## Revision 4 — layouts, tiers, device order, menu
+
+- Tiers are `3` and `5` (the 2-colour tier is gone). Palette candidates are
+  deduplicated by exact hex only and must lie within 90° of the anchor's hue;
+  a theme short of nearby hues lights fewer colours rather than its opposite
+  ones. The hero's meta line reports how many are actually lit.
+- `layout` in theme-rgb.json: `flow` (default, by LED order), `rows`,
+  `columns`, `zones`. On keyboards (LED names `Key: …`) a built-in map of the
+  full-size ANSI board gives each key a row 0–5, a column in key units and a
+  zone (`fn main mod nav numpad logo`); rows and columns split into k bands
+  by position, zones give each zone the next stop in turn. Unknown keys and
+  blank matrix cells keep their flow colour. Other devices: rows/columns are
+  the flow; zones colours each OpenRGB zone in turn with `-z`.
+- LED lines are tokenised exactly as openrgb prints them (quoted names, blank
+  cells, the quote key), so `-c` indexes line up with the hardware.
+- The device list records `Type:` and sorts desk peripherals first (keyboard,
+  mouse, …), then monitor and lights, then what is inside the case.
+- The panel header drops the sync timestamp; status only replaces the meta
+  line when something needs attention. Swatches are compact content-sized
+  chips in a flow, quiet at rest. A header menu offers Sync now, Install
+  OpenRGB (when missing) and GitHub.
+- Service saves are serialised (a save while one is in flight is queued and
+  the latest payload wins) and the stops probe re-runs after finishing rather
+  than being killed mid-way, so rapid switching between modes cannot leave the
+  file, the preview and the hardware disagreeing.
