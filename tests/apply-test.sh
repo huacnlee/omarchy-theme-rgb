@@ -157,33 +157,35 @@ fi
 # three and five colours: the theme's roles, by what each device is for
 # ==========================================================================
 
-# --- 3 colours are accent, foreground, blue everywhere; never background --
+# --- 3 colours: accent, blue, then yellow on the desk, magenta around it --
+# Never background or foreground: near black and near white make dark or
+# colourless bands.
 set_config '{"mode": "palette", "colors": 3}'
-if [[ $(stops) == 0000ff,ffffff,0080ff && $(stops ambient) == 0000ff,ffffff,0080ff ]]; then
-  pass "3 colours are accent, foreground, blue everywhere; never background"
+if [[ $(stops) == 0000ff,0080ff,ffff00 && $(stops ambient) == 0000ff,0080ff,ff00ff ]]; then
+  pass "3 colours: accent, blue, then yellow on the desk, magenta around it"
 else
-  fail "3 colours are accent, foreground, blue everywhere; never background" "$(stops) / $(stops ambient)"
+  fail "3 colours: accent, blue, then yellow on the desk, magenta around it" "$(stops) / $(stops ambient)"
 fi
 
-# --- 5 colours add yellow and red on the desk, magenta and cyan around it -
+# --- 5 colours add red and green on the desk, cyan and red around it ------
 set_config '{"mode": "palette", "colors": 5}'
-if [[ $(stops) == 0000ff,ffffff,0080ff,ffff00,ff0000 && $(stops ambient) == 0000ff,ffffff,0080ff,ff00ff,00ffff ]]; then
-  pass "5 colours add yellow and red on the desk, magenta and cyan around it"
+if [[ $(stops) == 0000ff,0080ff,ffff00,ff0000,00ff00 && $(stops ambient) == 0000ff,0080ff,ff00ff,00ffff,ff0000 ]]; then
+  pass "5 colours add red and green on the desk, cyan and red around it"
 else
-  fail "5 colours add yellow and red on the desk, magenta and cyan around it" "$(stops) / $(stops ambient)"
+  fail "5 colours add red and green on the desk, cyan and red around it" "$(stops) / $(stops ambient)"
 fi
 
-# --- 8 colours carry on with green, magenta, cyan on the desk; red, green, yellow around it
+# --- 8 colours carry on with magenta, cyan, orange on the desk; green, yellow, orange around it
 set_config '{"mode": "palette", "colors": 8}'
-if [[ $(stops) == 0000ff,ffffff,0080ff,ffff00,ff0000,00ff00,ff00ff,00ffff && $(stops ambient) == 0000ff,ffffff,0080ff,ff00ff,00ffff,ff0000,00ff00,ffff00 ]]; then
-  pass "8 colours carry on with green, magenta, cyan on the desk; red, green, yellow around it"
+if [[ $(stops) == 0000ff,0080ff,ffff00,ff0000,00ff00,ff00ff,00ffff,ff8000 && $(stops ambient) == 0000ff,0080ff,ff00ff,00ffff,ff0000,00ff00,ffff00,ff8000 ]]; then
+  pass "8 colours carry on with magenta, cyan, orange on the desk; green, yellow, orange around it"
 else
-  fail "8 colours carry on with green, magenta, cyan on the desk; red, green, yellow around it" "$(stops) / $(stops ambient)"
+  fail "8 colours carry on with magenta, cyan, orange on the desk; green, yellow, orange around it" "$(stops) / $(stops ambient)"
 fi
 
 # --- missing config means 5 colours ---------------------------------------
 rm "$home/.config/omarchy/theme-rgb.json"
-if [[ $(stops) == 0000ff,ffffff,0080ff,ffff00,ff0000 ]]; then
+if [[ $(stops) == 0000ff,0080ff,ffff00,ff0000,00ff00 ]]; then
   pass "missing config means 5 colours"
 else
   fail "missing config means 5 colours" "$(stops)"
@@ -234,7 +236,7 @@ OPENRGB_LIST_DEVICES='0: ENE DRAM
   Type:           Keyboard
   Modes: [Direct] Static
   LEDs: a b c d e ' run_apply
-if called 'openrgb -d 0 -m direct -c 0000ff,ffffff,00ff00,ff00ff -d 1 -m direct -c 0000ff,ffffff,00ff00,ffff00'; then
+if called 'openrgb -d 0 -m direct -c 0000ff,0000ff,00ff00,ff00ff,ffff00 -d 1 -m direct -c 0000ff,0000ff,00ff00,ffff00,ff00ff'; then
   pass "each device gets its own class's colours in the one call"
 else
   fail "each device gets its own class's colours in the one call" "$(cat "$calls")"
@@ -242,7 +244,7 @@ fi
 
 # --- failed detection broadcasts the desk colours -------------------------
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" OPENRGB_LIST_FAIL=1 run_apply
-if called 'openrgb -c 0000ff,ffffff,00ff00,ffff00'; then
+if called 'openrgb -c 0000ff,00ff00,ffff00,ff00ff'; then
   pass "failed detection broadcasts the desk colours"
 else
   fail "failed detection broadcasts the desk colours" "$(cat "$calls")"

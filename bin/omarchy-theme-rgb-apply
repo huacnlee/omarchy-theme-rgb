@@ -36,12 +36,13 @@ LAYOUT=flow        # flow | rows | columns | zones
 # With three, five or eight colours each device lights the theme's roles in
 # an order that suits what it is for. The desk (keyboard, mouse, ...) is the
 # working surface; everything else — the screen's backlight, the strips,
-# what is inside the case — is ambient. Three colours are the same
-# everywhere: accent, foreground, blue. The background is left out: it is
-# near black in most themes, and a band of it is a band of dark keys.
+# what is inside the case — is ambient. Background and foreground are left
+# out: one is near black in most themes and the other near white, and a band
+# of either is a band of dark or colourless keys. Both stay available to
+# pick by hand.
 DESK_TYPES="Keyboard Mouse Mousemat Headset HeadsetStand Gamepad"
-DESK_ROLES="accent foreground blue yellow red green magenta cyan orange brown"
-AMBIENT_ROLES="accent foreground blue magenta cyan red green yellow orange brown"
+DESK_ROLES="accent blue yellow red green magenta cyan orange brown"
+AMBIENT_ROLES="accent blue magenta cyan red green yellow orange brown"
 
 is_variable() { [[ " $VARIABLES " == *" $1 "* ]]; }
 

@@ -32,15 +32,14 @@ Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
 - **Colours** — `1`, `3`, `Default` (five), `8` or `Custom`.
   - *1* lights one theme variable on every device: the accent unless you
     pick another.
-  - *3* lights accent, foreground and blue everywhere. The background is
-    left out of these lists on purpose: it is near black in most themes, and
-    a band of it is a band of dark keys.
-  - *Default* (five) and *8* carry on with the theme's other roles in an order that
+  - *3*, *Default* (five) and *8* take the theme's roles in an order that
     suits what each device is for: on the desk (keyboard, mouse, headset,
-    pad) `yellow, red, green, magenta…`; around it (screen, strips, RAM,
-    motherboard, case) `magenta, cyan, red, green…`. Click a swatch to put
-    it first for that class. Variables the theme lacks, and repeated
-    colours, are skipped.
+    pad) `accent, blue, yellow, red, green, magenta, cyan…`; around it
+    (screen, strips, RAM, motherboard, case) `accent, blue, magenta, cyan,
+    red, green, yellow…`. Background and foreground are left out on purpose
+    — near black and near white make dark or colourless bands — but stay
+    available to pick by hand. Click a swatch to put it first for that
+    class. Variables the theme lacks, and repeated colours, are skipped.
   - *Custom* lights exactly the variables you pick, in the order you pick them.
 - **Theme colour** — swatches of the current theme's `accent background red
   orange yellow green cyan blue magenta brown foreground`, as `colors.toml`
