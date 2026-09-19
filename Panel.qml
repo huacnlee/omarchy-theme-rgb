@@ -10,10 +10,9 @@ import qs.Ui
 Panel {
   id: themeRgb
   moduleName: "huacnlee.theme_rgb"
+  // With two monitors there are two bars and two of this widget; the second
+  // handler logs that it is unused, as the first-party panels' do.
   ipcTarget: "huacnlee.theme_rgb"
-  // The bar registers the IPC handler for placed widgets; a second one here
-  // would only log that it is unused.
-  manageIpc: false
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
@@ -29,9 +28,9 @@ Panel {
 
   readonly property var modes: [
     { value: "single", label: "Single", tooltip: "One theme colour on every device" },
-    { value: "2", label: "2 colours", tooltip: "The chosen colour plus its nearest theme colour" },
-    { value: "3", label: "3 colours", tooltip: "The chosen colour plus the two nearest theme colours" },
-    { value: "5", label: "5 colours", tooltip: "The chosen colour plus the four nearest theme colours" },
+    { value: "2", label: "2", tooltip: "Two colours: the chosen one plus its nearest theme colour" },
+    { value: "3", label: "3", tooltip: "Three colours: the chosen one plus the two nearest" },
+    { value: "5", label: "5", tooltip: "Five colours: the chosen one plus the four nearest" },
     { value: "custom", label: "Custom", tooltip: "Exactly the theme colours you pick, in that order" }
   ]
 
@@ -50,11 +49,10 @@ Panel {
     ? (service && service.single !== "" ? service.single : "accent")
     : (service ? service.anchor : "accent")
 
-  readonly property string metaText: {
-    if (mode === "single") return "One theme colour"
-    if (mode === "custom") return custom.length + " chosen colour" + (custom.length === 1 ? "" : "s")
-    return modeValue + " theme colours"
-  }
+  // What is actually lit: a theme may not have five distinct hues to offer.
+  readonly property string metaText: stops.length <= 1
+    ? "One theme colour"
+    : stops.length + " theme colours in bands"
   readonly property string detailText: {
     if (!service) return "Service not running"
     if (!openrgbPresent) return "OpenRGB is not installed"
@@ -185,9 +183,10 @@ Panel {
     bar: themeRgb.bar
     open: themeRgb.opened
     focusTarget: keyCatcher
-    // Wide enough for the five mode chips in one row at any font size.
-    contentWidth: panel.fittedContentWidth(Math.max(Style.space(360), modeGroup.implicitWidth))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(640))
+    // Wide enough for the five mode chips in one row at any font size; the
+    // Row's laid-out width is what the chips actually take.
+    contentWidth: panel.fittedContentWidth(Math.max(Style.space(360), modeGroup.width))
+    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(900))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -206,9 +205,20 @@ Panel {
         else if (key === "r") themeRgb.syncNow()
       }
 
+      // Scrolls when a long device list outgrows the screen.
+      Flickable {
+        id: panelFlick
+        anchors.fill: parent
+        contentWidth: width
+        contentHeight: column.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.VerticalFlick
+        interactive: contentHeight > height
+
       Column {
         id: column
-        width: parent.width
+        width: panelFlick.width
         spacing: Style.space(12)
 
         PanelHero {
@@ -282,10 +292,14 @@ Panel {
             fontFamily: themeRgb.fontFamily
           }
 
-          Flow {
-            id: swatchFlow
+          Grid {
+            id: swatchGrid
             width: parent.width
-            spacing: Style.space(6)
+            columns: 3
+            columnSpacing: Style.space(6)
+            rowSpacing: Style.space(4)
+
+            readonly property real cellWidth: Math.floor((width - columnSpacing * (columns - 1)) / columns)
 
             Repeater {
               model: themeRgb.variables
@@ -299,17 +313,17 @@ Panel {
                 readonly property bool hot: themeRgb.cursorActive && themeRgb.cursorRow === "swatch" && themeRgb.cursorIndex === index
                 readonly property int customOrder: themeRgb.custom.indexOf(modelData.name)
 
-                width: label.implicitWidth + Style.space(18) + Style.space(20)
+                width: swatchGrid.cellWidth
                 height: Style.spacing.controlHeight
 
+                // Quiet at rest; the shared hover and selected fills otherwise.
                 Rectangle {
                   anchors.fill: parent
                   color: swatch.selected
                     ? Qt.rgba(themeRgb.foreground.r, themeRgb.foreground.g, themeRgb.foreground.b, 0.18)
                     : (swatch.hot ? Qt.rgba(themeRgb.foreground.r, themeRgb.foreground.g, themeRgb.foreground.b, 0.08) : "transparent")
-                  border.width: 1
-                  border.color: Qt.rgba(themeRgb.foreground.r, themeRgb.foreground.g, themeRgb.foreground.b,
-                    swatch.selected ? 1.0 : (swatch.hot ? 0.25 : 0.40))
+                  border.width: swatch.selected ? 1 : 0
+                  border.color: themeRgb.foreground
                 }
 
                 // The colour itself, as the theme defines it.
@@ -340,8 +354,11 @@ Panel {
                   id: label
                   anchors.left: chip.right
                   anchors.leftMargin: Style.space(6)
+                  anchors.right: parent.right
+                  anchors.rightMargin: Style.space(4)
                   anchors.verticalCenter: parent.verticalCenter
                   text: swatch.modelData.name
+                  elide: Text.ElideRight
                   color: themeRgb.foreground
                   font.family: themeRgb.fontFamily
                   font.pixelSize: Style.font.body
@@ -506,6 +523,7 @@ Panel {
             font.pixelSize: Style.font.caption
           }
         }
+      }
       }
     }
   }

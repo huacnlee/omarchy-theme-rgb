@@ -36,6 +36,10 @@ Item {
 
   property bool openrgbPresent: false
   property bool serverRunning: false
+  // True once an SDK server answers on its port (ours or the user's), or once
+  // we have given up waiting. Until then applies queue: a direct probe while
+  // the server is still enumerating sees only the devices it has not grabbed.
+  property bool serverReady: false
   property bool syncing: false
   property bool applyPending: false
   property string lastSyncedAt: ""
@@ -118,12 +122,21 @@ Item {
   // run, so rapid switching never fires concurrent OpenRGB calls and the
   // last state always wins.
   function apply() {
-    if (applyProcess.running) {
+    if (applyProcess.running || !serverReady) {
       root.applyPending = true
       return
     }
     root.syncing = true
     applyProcess.running = true
+  }
+
+  function markServerReady() {
+    serverReady = true
+    readinessTimer.stop()
+    if (applyPending) {
+      applyPending = false
+      apply()
+    }
   }
 
   function onThemeChanged() {
@@ -179,8 +192,33 @@ Item {
     command: ["bash", "-c", "command -v openrgb"]
     onExited: function(exitCode) {
       root.openrgbPresent = exitCode === 0
-      if (root.openrgbPresent) root.startServer()
+      if (root.openrgbPresent) {
+        root.startServer()
+        readinessTimer.start()
+      } else {
+        root.markServerReady()
+      }
     }
+  }
+
+  // Poll the SDK port once a second for up to 20 s, then go ahead regardless.
+  property int readinessPolls: 0
+
+  Timer {
+    id: readinessTimer
+    interval: 1000
+    repeat: true
+    onTriggered: {
+      root.readinessPolls++
+      if (root.readinessPolls > 20) { root.markServerReady(); return }
+      if (!portProbe.running) portProbe.running = true
+    }
+  }
+
+  Process {
+    id: portProbe
+    command: ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6742"]
+    onExited: function(exitCode) { if (exitCode === 0) root.markServerReady() }
   }
 
   // Without a server every `openrgb` call re-probes the hardware (seconds per
@@ -205,11 +243,7 @@ Item {
         if (msg !== "") console.warn("huacnlee.theme_rgb: openrgb server: " + msg.split("\n").slice(-3).join(" | "))
       }
     }
-    onStarted: {
-      root.serverRunning = true
-      // Give the server a moment to enumerate before the first apply.
-      firstApplyTimer.restart()
-    }
+    onStarted: root.serverRunning = true
     onExited: function(exitCode) {
       root.serverRunning = false
       console.warn("huacnlee.theme_rgb: openrgb server exited with " + exitCode + " (start " + root.serverStarts + ")")
@@ -222,13 +256,6 @@ Item {
     interval: 30000
     repeat: false
     onTriggered: root.startServer()
-  }
-
-  Timer {
-    id: firstApplyTimer
-    interval: 1500
-    repeat: false
-    onTriggered: root.apply()
   }
 
   Process {
