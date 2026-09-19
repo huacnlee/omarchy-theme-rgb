@@ -66,12 +66,13 @@ magenta = "#ff00ff"
 brown = "#8000ff"
 TOML
 
+# Both already in Static, so a single-colour apply checks out first time.
 PLAIN_DEVICES='0: Logitech G512 RGB
   Type:           Keyboard
-  Modes: [Direct] Static Off Cycle Breathing
+  Modes: Direct [Static] Off Cycle Breathing
 1: Razer Basilisk V3
   Type:           Mouse
-  Modes: [Direct] Off Static '"'"'Spectrum Cycle'"'"' Wave'
+  Modes: Direct Off [Static] '"'"'Spectrum Cycle'"'"' Wave'
 
 # ==========================================================================
 # single colour
