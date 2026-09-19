@@ -49,16 +49,13 @@ Panel {
     : (service ? service.anchor : "accent")
 
   // What is actually lit: a theme may not have five distinct hues to offer.
-  readonly property string metaText: stops.length <= 1
-    ? "One theme colour"
-    : stops.length + " theme colours in bands"
-  readonly property string detailText: {
+  // Anything that needs attention takes this line over.
+  readonly property string metaText: {
     if (!service) return "Service not running"
     if (!openrgbPresent) return "OpenRGB is not installed"
     if (syncing) return "Syncing…"
     if (service.lastSyncFailed) return "Last sync failed"
-    if (service.lastSyncedAt !== "") return "Synced " + service.lastSyncedAt
-    return "Not synced yet"
+    return stops.length <= 1 ? "One theme colour" : stops.length + " theme colours in bands"
   }
   readonly property string swatchHeading: mode === "single" ? "THEME COLOUR" : (mode === "custom" ? "COLOURS TO LIGHT" : "AROUND")
   readonly property string swatchHint: {
@@ -225,7 +222,6 @@ Panel {
           width: parent.width
           title: "Theme RGB"
           meta: themeRgb.metaText
-          detail: themeRgb.detailText
           foreground: themeRgb.foreground
           fontFamily: themeRgb.fontFamily
           iconOpacity: themeRgb.openrgbPresent ? 1.0 : 0.5
