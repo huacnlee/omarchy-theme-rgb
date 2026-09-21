@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "Startup.js" as Startup
 
 // Keeps OpenRGB devices in the theme's colours. The colour maths and device
 // handling live in bin/omarchy-theme-rgb-apply so they can be tested (and
@@ -213,14 +214,11 @@ Item {
     // Our own writes land here too. While a save is in flight or queued the
     // file lags the state, so do not let a stale read overwrite what the
     // user just chose.
-    onLoaded: if (!root.saving) root.loadConfig(text())
-    onLoadFailed: if (!root.saving) root.loadConfig("")
+    onLoaded: if (!root.saving) Startup.configLoaded(root, text())
+    onLoadFailed: if (!root.saving) Startup.configLoaded(root, "")
     // An edit from outside the shell (an editor, a script) takes effect like
     // one from the panel.
-    onFileChanged: {
-      reload()
-      if (!root.saving) { root.refreshStops(); root.apply() }
-    }
+    onFileChanged: reload()
   }
 
   FileView {
