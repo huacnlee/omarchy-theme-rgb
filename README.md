@@ -18,7 +18,7 @@ as a shell plugin you can add and remove.
 ## Install
 
 ```bash
-omarchy pkg add openrgb      # if you do not have it yet
+omarchy-pkg-add openrgb      # if you do not have it yet
 omarchy plugin add https://github.com/huacnlee/omarchy-theme-rgb.git --enable
 ```
 
