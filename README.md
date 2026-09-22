@@ -65,6 +65,10 @@ once the package is in place.
 The candidates are the accent plus `red`, `orange`, `yellow`, `green`, `cyan`,
 `blue`, `magenta` and `brown` from the theme's `colors.toml` — never
 background or foreground, which would light as dark or colourless bands.
+When a theme provides an ANSI palette, the coloured slots `color1`–`color6`
+and their bright variants `color9`–`color14` supplement any semantic
+candidates; background/foreground slots `color0`, `color7`, `color8` and
+`color15` stay excluded.
 Greys (saturation under 15 %) and very dark or very light tones (lightness
 outside 15–90 %) are dropped.
 

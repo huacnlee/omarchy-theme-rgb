@@ -7,7 +7,7 @@ set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 APPLY="$ROOT/bin/omarchy-theme-rgb-apply"
 
-tmp=$(mktemp -d)
+tmp=$(mktemp -d "$ROOT/.test-tmp.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 
 mock_bin="$tmp/bin"
@@ -184,6 +184,41 @@ if [[ $(stops) == 0000ff,ff0000,ff8000,ffff00,00ff00 ]]; then
   pass "missing config means 5 colours"
 else
   fail "missing config means 5 colours" "$(stops)"
+fi
+
+# --- ANSI-only themes still provide a palette -----------------------------
+# Many Omarchy themes expose terminal colours as color0..color15 rather than
+# semantic red/green/etc variables. The accent remains first; ANSI colours
+# fill the rest of the requested palette.
+cat >"$theme/colors.toml" <<'TOML'
+accent = "#ff8000"
+background = "#101010"
+foreground = "#f0f0f0"
+color0 = "#101010"
+color1 = "#ff0000"
+color2 = "#00ff00"
+color3 = "#ffff00"
+color4 = "#0000ff"
+color5 = "#ff00ff"
+color6 = "#00ffff"
+color7 = "#f0f0f0"
+color8 = "#303030"
+color9 = "#ff4040"
+color10 = "#40ff40"
+color11 = "#ffff40"
+color12 = "#4040ff"
+color13 = "#ff40ff"
+color14 = "#40ffff"
+color15 = "#ffffff"
+TOML
+set_config '{"mode": "palette", "colors": 5}'
+ansi_variables='accent ff8000
+background 101010
+foreground f0f0f0'
+if [[ $(stops) == ff8000,ff0000,00ff00,ffff00,0000ff && $(variables) == "$ansi_variables" ]]; then
+  pass "ANSI-only themes still provide a palette"
+else
+  fail "ANSI-only themes still provide a palette" "$(stops) / $(variables)"
 fi
 
 # --- with no wallpaper colour, the vivid come before the muted -------------

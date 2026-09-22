@@ -191,8 +191,27 @@ valid_hex() { [[ $1 =~ ^[0-9A-Fa-f]{6}$ ]]; }
 theme_variables() {
   [[ -f $THEME_DIR/colors.toml ]] || return
   awk -v names="$VARIABLES" '
-    BEGIN { n = split(names, order, " "); for (i = 1; i <= n; i++) wanted[order[i]] = i }
+    BEGIN { n = split(names, order, " "); for (i = 1; i <= n; i++) wanted[order[i]] = 1 }
     /^[[:space:]]*[A-Za-z_]+[[:space:]]*=/ {
+      key = $1
+      if (!(key in wanted) || (key in value)) next
+      if (match($0, /#[0-9A-Fa-f]{6}/)) value[key] = tolower(substr($0, RSTART + 1, 6))
+    }
+    END { for (i = 1; i <= n; i++) if (order[i] in value) print order[i], value[order[i]] }
+  ' "$THEME_DIR/colors.toml"
+}
+
+# ANSI palette hues supplement the semantic variables for automatic palette
+# selection only. The background slots (0 and 8) and foreground slots (7 and
+# 15) are deliberately absent.
+ansi_palette_variables() {
+  [[ -f $THEME_DIR/colors.toml ]] || return
+  awk '
+    BEGIN {
+      n = split("color1 color2 color3 color4 color5 color6 color9 color10 color11 color12 color13 color14", order, " ")
+      for (i = 1; i <= n; i++) wanted[order[i]] = 1
+    }
+    /^[[:space:]]*color[0-9]+[[:space:]]*=/ {
       key = $1
       if (!(key in wanted) || (key in value)) next
       if (match($0, /#[0-9A-Fa-f]{6}/)) value[key] = tolower(substr($0, RSTART + 1, 6))
@@ -232,7 +251,7 @@ wallpaper_palette() {
 theme_order() {
   local wallpaper
   wallpaper=$(wallpaper_palette)
-  theme_variables | WALLPAPER="$wallpaper" awk '
+  { theme_variables; ansi_palette_variables; } | WALLPAPER="$wallpaper" awk '
     function hex_value(char) { return index("0123456789abcdef", tolower(char)) - 1 }
     function channel(hex, idx) { return hex_value(substr(hex, idx, 1)) * 16 + hex_value(substr(hex, idx + 1, 1)) }
     # HSL: hue in degrees, saturation and lightness 0..100
