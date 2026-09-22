@@ -30,8 +30,11 @@ apply:
 # Symlinks this checkout into ~/.config/omarchy/plugins so edits are read
 # live. Development only — users install with `omarchy plugin add`.
 install:
-	mkdir -p $(dir $(PLUGIN_LINK))
-	ln -sfn $(CURDIR) $(PLUGIN_LINK)
+	mkdir -p "$(dir $(PLUGIN_LINK))"
+	@if [ -e "$(PLUGIN_LINK)" ] && [ ! -L "$(PLUGIN_LINK)" ]; then \
+		omarchy plugin remove $(PLUGIN_ID) --yes; \
+	fi
+	ln -sfn "$(CURDIR)" "$(PLUGIN_LINK)"
 	omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
 	@for i in $$(seq 1 40); do \
 	  omarchy plugin list --json 2>/dev/null | jq -e 'any(.[]; .id == "$(PLUGIN_ID)")' >/dev/null && break; \
