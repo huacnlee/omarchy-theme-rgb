@@ -159,7 +159,6 @@ Item {
 
   function markServerReady() {
     serverReady = true
-    readinessTimer.stop()
     if (applyPending) {
       applyPending = false
       apply()
@@ -294,6 +293,7 @@ Item {
       }
       root.startServer()
       root.readinessPolls = 0
+      root.lastDeviceCount = -1
       readinessTimer.start()
       // Freshly installed: hold the first sync until the server answers,
       // exactly as at shell start, rather than probing hardware it is still
@@ -305,8 +305,16 @@ Item {
     }
   }
 
-  // Poll the SDK port once a second for up to 20 s, then go ahead regardless.
+  // Watch the server's device list once a second for its first minute.
+  // The port answers as soon as the server starts, but detection runs for
+  // seconds more with quiet gaps: DRAM over I2C first, keyboards and mice
+  // over HID later. Syncing on the open port alone lit only the RAM at login
+  // and left the keyboard in its power-on colours. So the first non-empty
+  // list releases the queued sync, and every later change to it syncs again.
+  // With nothing listed after 20 s, go ahead regardless. The port is checked
+  // first so the CLI never falls back to probing the hardware itself.
   property int readinessPolls: 0
+  property int lastDeviceCount: -1
 
   Timer {
     id: readinessTimer
@@ -314,15 +322,29 @@ Item {
     repeat: true
     onTriggered: {
       root.readinessPolls++
-      if (root.readinessPolls > 20) { root.markServerReady(); return }
-      if (!portProbe.running) portProbe.running = true
+      if (root.readinessPolls > 60) { readinessTimer.stop(); return }
+      if (root.readinessPolls > 20 && !root.serverReady) root.markServerReady()
+      if (!deviceCountProbe.running) deviceCountProbe.running = true
     }
   }
 
   Process {
-    id: portProbe
-    command: ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6742"]
-    onExited: function(exitCode) { if (exitCode === 0) root.markServerReady() }
+    id: deviceCountProbe
+    command: ["bash", "-c",
+      "exec 3<>/dev/tcp/127.0.0.1/6742 || exit 1; exec 3>&-; "
+      + "timeout 10 openrgb --list-devices 2>/dev/null | grep -cE '^[0-9]+: '"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var count = parseInt(String(text || "").trim(), 10)
+        if (!isFinite(count)) return
+        var changed = Startup.deviceCountChanged(root.lastDeviceCount, count)
+        root.lastDeviceCount = count
+        if (!changed) return
+        if (root.serverReady) root.apply()
+        else root.markServerReady()
+      }
+    }
   }
 
   // Without a server every `openrgb` call re-probes the hardware (seconds per
