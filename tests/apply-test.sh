@@ -89,6 +89,44 @@ else
   fail "single mode is the accent on every device, in one static call" "$(cat "$calls")"
 fi
 
+# --- direct-only cooler does not invalidate the shared ambient sync ------
+OPENRGB_LIST_DEVICES='0: NZXT RGB Controller
+  Type:           LED Strip
+  Modes: Direct [Static] Fading
+1: Corsair Commander Core
+  Type:           Cooler
+  Modes: [Direct]
+2: ASUS PRIME X670-P WIFI
+  Type:           Motherboard
+  Modes: Direct Off [Static]' run_apply
+if called 'openrgb -d 0 -m static -c 0000ff -b 100 -d 1 -m direct -c 0000ff -b 100 -d 2 -m static -c 0000ff -b 100'; then
+  pass "direct-only cooler uses a supported mode alongside other devices"
+else
+  fail "direct-only cooler uses a supported mode alongside other devices" "$(cat "$calls")"
+fi
+
+# --- opt-in case lighting follows the palette, including Direct-only AIO --
+set_config '{"mode":"palette","colors":3,"all_devices":true}'
+OPENRGB_LIST_DEVICES='0: GPU
+  Type:           GPU
+  Modes: [Direct] Static
+  LEDs: a b c d
+1: Corsair Commander Core
+  Type:           Cooler
+  Modes: [Direct]
+  LEDs: a b c
+2: NZXT RGB Controller
+  Type:           LED Strip
+  Modes: [Direct] Static
+  LEDs: a b c d e f' run_apply
+if [[ $(stops ambient) == 0000ff,ff0000,ff8000 ]] \
+  && called 'openrgb -d 0 -m direct -c 0000ff,0000ff,ff0000,ff8000 -d 1 -m direct -c 0000ff,ff0000,ff8000 -d 2 -m direct -c 0000ff,0000ff,ff0000,ff0000,ff8000,ff8000'; then
+  pass "all-devices palette reaches GPU, Direct-only cooler, and case fans"
+else
+  fail "all-devices palette reaches GPU, Direct-only cooler, and case fans" "$(cat "$calls")"
+fi
+set_config '{"mode":"single"}'
+
 # --- gradient-capable devices prefer their gradient mode ------------------
 OPENRGB_LIST_DEVICES='0: Fake Board
   Modes: Direct Static Gradient Wave
