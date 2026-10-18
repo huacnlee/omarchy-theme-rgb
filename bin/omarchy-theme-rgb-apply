@@ -33,6 +33,7 @@ COLORS=5
 CUSTOM=""
 BRIGHTNESS=100
 LAYOUT=flow        # flow | rows | columns | zones
+ALL_DEVICES=false  # Apply the selected palette to case lighting as well.
 
 # With three, five or eight colours every device lights the theme's own
 # colours, ordered by how close each sits to the current wallpaper's
@@ -41,10 +42,11 @@ LAYOUT=flow        # flow | rows | columns | zones
 # with no colour to speak of leaves the order to vividness. Greys, dark
 # tones and near-duplicates are skipped.
 BACKGROUND_LINK="$HOME/.local/state/omarchy/current/background"
-# The bands go on the desk — keyboard, mouse and the like. Everything else
+# By default bands go on the desk — keyboard, mouse and the like. Everything else
 # (the screen's backlight, strips, RAM, motherboard, case) is ambient light
 # and shows the accent alone: one colour reads as the theme from across the
-# room; five bands on a monitor's backlight do not.
+# room; five bands on a monitor's backlight do not. all_devices opts case
+# lighting into the same palette and layout as the desk peripherals.
 DESK_TYPES="Keyboard Mouse Mousemat Headset HeadsetStand Gamepad"
 
 is_variable() { [[ " $VARIABLES " == *" $1 "* ]]; }
@@ -56,6 +58,7 @@ if [[ -f $CONFIG ]] && command -v jq >/dev/null 2>&1; then
   custom=$(jq -r '(.custom // []) | if type == "array" then join(" ") else "" end' "$CONFIG" 2>/dev/null)
   brightness=$(jq -r '.brightness // empty' "$CONFIG" 2>/dev/null)
   layout=$(jq -r '.layout // empty' "$CONFIG" 2>/dev/null)
+  [[ $(jq -r '.all_devices == true' "$CONFIG" 2>/dev/null) == true ]] && ALL_DEVICES=true
   [[ $mode == single || $mode == palette || $mode == custom ]] && MODE=$mode
   is_variable "$single" && SINGLE=$single
   [[ $colors == 3 || $colors == 5 || $colors == 8 ]] && COLORS=$colors
@@ -381,14 +384,18 @@ all_stops() {
   done
 }
 
-# "desk a,b,c" and "ambient a": what the desk gets, and the one colour
-# everything else gets.
+# "desk a,b,c" and "ambient a": the desk palette and ambient accent,
+# or matching palettes when all_devices is enabled.
 stops() {
   local list
   list=$(all_stops | paste -sd,)
   [[ -n $list ]] || return
   echo "desk $list"
-  echo "ambient ${list%%,*}"
+  if [[ $ALL_DEVICES == true ]]; then
+    echo "ambient $list"
+  else
+    echo "ambient ${list%%,*}"
+  fi
 }
 
 case ${1:-} in
@@ -470,6 +477,9 @@ device_info() {
       modes = substr($0, 9)
       gsub(/[\[\]]/, "", modes)
       if (match(" " modes " ", / [Dd]irect /)) multi = "direct"
+      # Some ambient controllers (Corsair Commander Core/ST) offer only
+      # Direct. Requesting Static makes OpenRGB reject the shared sync.
+      if (!match(" " modes " ", / [Ss]tatic /) && multi == "direct") mode = "direct"
       if (match(modes, /\047[^\047]*[Gg]radient[^\047]*\047/)) {
         mode = substr(modes, RSTART + 1, RLENGTH - 2)
       } else {
@@ -572,7 +582,7 @@ DEVICE_IDS=()
 args=()
 while IFS="|" read -r id mode leds name type zones multi names; do
   local_args=()
-  if (( ${#STOPS[@]} > 1 )) && [[ " $DESK_TYPES " == *" $type "* ]]; then
+  if (( ${#STOPS[@]} > 1 )) && { [[ $ALL_DEVICES == true ]] || [[ " $DESK_TYPES " == *" $type "* ]]; }; then
     # Several colours need the device in a per-LED mode: in static it keeps
     # one colour and quietly drops the rest, which is how a sync "fails".
     if [[ $LAYOUT == zones && $names != *"Key: "* ]] && (( zones > 1 )); then
