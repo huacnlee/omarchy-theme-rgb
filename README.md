@@ -116,6 +116,14 @@ script also honours `"single": "<variable>"` (which theme variable *1*
 lights) and `"mode": "custom"` with `"custom": ["blue", "magenta"]` — neither
 of which the panel exposes.
 
+Set `"all_devices": true` in the settings file to apply the selected
+palette and layout to the cooler, GPU and case fans as well as desk
+peripherals. It defaults to `false`, preserving accent-only ambient lighting.
+The panel preserves this setting when saving changes. Devices with fewer
+LEDs than palette colours display a sampled subset. Flow arranges fixed
+colour bands; it does not animate them. Single-colour mode still sets every
+device to the selected theme colour.
+
 ## Speed
 
 Without an OpenRGB SDK server, every `openrgb` command re-probes all your
