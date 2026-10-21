@@ -19,7 +19,11 @@ mkdir -p "$mock_bin" "$theme"
 cat >"$mock_bin/openrgb" <<'SH'
 #!/bin/bash
 printf 'openrgb %s\n' "$*" >>"$CALL_LOG"
-if [[ $* == *"--list-devices"* ]]; then
+if [[ $* == *"--list-devices"* && ${OPENRGB_SIMPLE_LIST:-0} == 1 ]]; then
+  printf '0: Test Keyboard\n'
+  exit 0
+fi
+if [[ $* == *"--list-devices"* || $* == *"--list-detailed"* ]]; then
   [[ ${OPENRGB_LIST_FAIL:-0} == 1 ]] && exit 1
   printf '%s\n' "$OPENRGB_LIST_DEVICES"
   exit 0
@@ -40,7 +44,7 @@ fail() {
 run_apply() {
   : >"$calls"
   HOME="$home" CALL_LOG="$calls" \
-    OPENRGB_LIST_DEVICES="${OPENRGB_LIST_DEVICES:-}" OPENRGB_LIST_FAIL="${OPENRGB_LIST_FAIL:-0}" OPENRGB_APPLY_FAIL="${OPENRGB_APPLY_FAIL:-0}" \
+    OPENRGB_SIMPLE_LIST="${OPENRGB_SIMPLE_LIST:-0}" OPENRGB_LIST_DEVICES="${OPENRGB_LIST_DEVICES:-}" OPENRGB_LIST_FAIL="${OPENRGB_LIST_FAIL:-0}" OPENRGB_APPLY_FAIL="${OPENRGB_APPLY_FAIL:-0}" \
     PATH="$mock_bin:$PATH" "$APPLY"
 }
 
@@ -541,7 +545,11 @@ fi
 cat >"$mock_bin/openrgb" <<'SH'
 #!/bin/bash
 printf 'openrgb %s\n' "$*" >>"$CALL_LOG"
-if [[ $* == *"--list-devices"* ]]; then
+if [[ $* == *"--list-devices"* && ${OPENRGB_SIMPLE_LIST:-0} == 1 ]]; then
+  printf '0: Test Keyboard\n'
+  exit 0
+fi
+if [[ $* == *"--list-devices"* || $* == *"--list-detailed"* ]]; then
   [[ ${OPENRGB_LIST_FAIL:-0} == 1 ]] && exit 1
   n=$(grep -c -- '--list-devices' "$CALL_LOG")
   # the first listing is detection; the second, the check after the apply
@@ -632,6 +640,13 @@ if [[ -f $devices_file && ! -s $devices_file ]]; then
   pass "failed detection leaves the device list empty"
 else
   fail "failed detection leaves the device list empty" "$(cat "$devices_file" 2>&1)"
+fi
+
+OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" OPENRGB_SIMPLE_LIST=1 run_apply
+if called "openrgb --list-detailed" && grep -q 'Logitech G512 RGB' "$devices_file"; then
+  pass "OpenRGB 1.1 uses detailed listing for discovery and verification"
+else
+  fail "OpenRGB 1.1 detailed listing" "$(cat "$calls")"
 fi
 
 echo

@@ -411,7 +411,14 @@ openrgb_call() {
 
 # Detection runs once and every apply is bounded, so a missing server or a
 # slow scan never stalls the theme switch.
-devices=$(timeout "$OPENRGB_TIMEOUT" openrgb --list-devices 2>/dev/null || true)
+list_option=--list-devices
+devices=$(timeout "$OPENRGB_TIMEOUT" openrgb "$list_option" 2>/dev/null || true)
+# OpenRGB 1.1 separates the short device list from its detailed listing.
+# Older versions already return details with --list-devices.
+if [[ -n $devices && $devices != *"  Type:"* ]]; then
+  list_option=--list-detailed
+  devices=$(timeout "$OPENRGB_TIMEOUT" openrgb "$list_option" 2>/dev/null || true)
+fi
 
 # One "<id>|<mode>|<leds>|<name>|<type>|<zones>|<multi>|<led names>" line per
 # device: mode is the device's own gradient effect if it has one (single mode
@@ -610,7 +617,7 @@ openrgb_call "${args[@]}" || exit $?
 # A write now and then goes missing on a busy USB device; this is what
 # makes the difference between "synced" and "one device stayed as it was".
 (( ${#DEVICE_IDS[@]} > 0 )) || exit 0
-after=$(timeout "$OPENRGB_TIMEOUT" openrgb --list-devices 2>/dev/null || true)
+after=$(timeout "$OPENRGB_TIMEOUT" openrgb "$list_option" 2>/dev/null || true)
 [[ -n $after ]] || exit 0
 retry=()
 while IFS="|" read -r id active; do
