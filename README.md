@@ -30,6 +30,8 @@ Remove it with `omarchy plugin remove huacnlee.theme_rgb`. That also stops
 the headless OpenRGB server the plugin keeps; the `openrgb` package stays
 installed until you remove it yourself.
 
+Supports both the OpenRGB 1.0 device listing and the 1.1 detailed listing.
+
 Dependencies: the `openrgb` package (the panel offers to install it), plus
 `jq` and ImageMagick's `magick`, which Omarchy ships. Nothing else.
 
