@@ -23,10 +23,10 @@ Item {
   // What theme-rgb.json says, with the script's defaults.
   property string mode: "palette"        // "single" | "palette" | "custom"
   property string single: ""             // "" = accent
-  property int colors: 5
+  property int colors: 8
   property var custom: []
   property int brightness: 100
-  property string layout: "flow"         // "flow" | "rows" | "columns" | "zones"
+  property string layout: "omarchy"     // spatial layouts or named key-accent presets
   property bool allDevices: false
 
   // [{ name, hex }] the current theme defines, for the swatches.
@@ -34,6 +34,8 @@ Item {
   // "#rrggbb" colours the script will light, per device class, for the
   // preview. `stops` is the desk list, which is also what a device of an
   // unknown type gets.
+  property var keyboardPreview: []
+  property bool keyboardDetected: false
   property var deskStops: []
   property var ambientStops: []
   readonly property var stops: deskStops
@@ -68,12 +70,15 @@ Item {
     mode = parsed.mode === "single" || parsed.mode === "custom" ? parsed.mode : "palette"
     single = typeof parsed.single === "string" ? parsed.single : ""
     var n = Number(parsed.colors)
-    colors = n === 3 || n === 8 ? n : 5
+    colors = n === 3 || n === 5 ? n : 8
     custom = Array.isArray(parsed.custom) ? parsed.custom.map(function(v) { return String(v) }) : []
     var b = Number(parsed.brightness)
     brightness = isFinite(b) && b >= 10 && b <= 100 ? Math.round(b) : 100
     var l = String(parsed.layout || "")
-    layout = l === "rows" || l === "columns" || l === "zones" ? l : "flow"
+    if (l === "wasd") l = "gaming"
+    if (l === "vim") l = "lazyvim"
+    if (l === "function" || l === "arrows") l = "zones"
+    layout = ["flow", "rows", "columns", "zones", "gaming", "outline", "lazyvim", "omarchy"].indexOf(l) >= 0 ? l : "omarchy"
     allDevices = parsed.all_devices === true
   }
 
@@ -85,7 +90,7 @@ Item {
   // state between two writes.
   function setPalette(n) { if (n === 3 || n === 5 || n === 8) { colors = n; mode = "palette"; save() } }
   function setLayout(value) {
-    if (value === "flow" || value === "rows" || value === "columns" || value === "zones") { layout = value; save() }
+    if (["flow", "rows", "columns", "zones", "gaming", "outline", "lazyvim", "omarchy"].indexOf(value) >= 0) { layout = value; save() }
   }
   function toggleCustom(name) {
     var next = custom.filter(function(v) { return v !== name })
@@ -141,6 +146,8 @@ Item {
       return
     }
     stopsProbe.running = true
+    if (keyboardProbe.running) keyboardProbe.running = false
+    keyboardProbe.running = true
   }
 
   function refreshVariables() {
@@ -420,6 +427,30 @@ Item {
   }
 
   Process {
+    id: keyboardProbe
+    command: ["bash", root.applyScript, "preview"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var keys = [], detected = false
+        var lines = String(text || "").trim().split("\n")
+        for (var i = 0; i < lines.length; i++) {
+          var f = lines[i].split("\t")
+          if (f.length !== 7 || !/^[0-9a-f]{6}$/.test(f[2])) continue
+          var row = Number(f[0]), column = Number(f[1])
+          if (!isFinite(row) || !isFinite(column) || row < 0 || row > 5 || column < 0 || column > 22) continue
+          var slot = Number(f[4])
+          if (!isFinite(slot) || slot < 0 || slot > 31 || Math.floor(slot) !== slot) continue
+          detected = f[5] === "detected"
+          keys.push({ row: row, column: column, color: "#" + f[2], name: f[3] })
+        }
+        root.keyboardPreview = keys
+        root.keyboardDetected = detected
+      }
+    }
+  }
+
+  Process {
     id: stopsProbe
     command: ["bash", root.applyScript, "stops"]
     stdout: StdioCollector {
@@ -481,6 +512,7 @@ Item {
         return
       }
       root.applyRetried = false
+      root.refreshStops()
     }
   }
 

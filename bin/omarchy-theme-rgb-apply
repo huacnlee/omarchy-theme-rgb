@@ -17,6 +17,7 @@ CONFIG="$HOME/.config/omarchy/theme-rgb.json"
 # panel: what sits on the desk first, then the screen, then what is in the
 # case.
 DEVICES_FILE="$HOME/.local/state/omarchy/theme-rgb/devices"
+KEYBOARD_FILE="$HOME/.local/state/omarchy/theme-rgb/keyboard-leds"
 # What openrgb said on the last apply, for a look when a sync went wrong.
 LOG_FILE="$HOME/.local/state/omarchy/theme-rgb/last-apply.log"
 DEVICE_TYPE_ORDER="Keyboard Mouse Mousemat Headset HeadsetStand Gamepad Monitor Speaker Light LEDStrip Motherboard DRAM GPU Cooler Case Storage Accessory"
@@ -29,10 +30,10 @@ VARIABLES="accent background red orange yellow green cyan blue magenta brown for
 
 MODE=palette
 SINGLE=""          # empty: accent
-COLORS=5
+COLORS=8
 CUSTOM=""
 BRIGHTNESS=100
-LAYOUT=flow        # flow | rows | columns | zones
+LAYOUT=omarchy        # flow | rows | columns | zones | key-accent presets
 ALL_DEVICES=false  # Apply the selected palette to case lighting as well.
 
 # With three, five or eight colours every device lights the theme's own
@@ -66,7 +67,8 @@ if [[ -f $CONFIG ]] && command -v jq >/dev/null 2>&1; then
   if [[ $brightness =~ ^[0-9]+$ ]] && (( brightness >= 1 && brightness <= 100 )); then
     BRIGHTNESS=$brightness
   fi
-  [[ $layout == flow || $layout == rows || $layout == columns || $layout == zones ]] && LAYOUT=$layout
+  case $layout in wasd) layout=gaming ;; vim) layout=lazyvim ;; function|arrows) layout=zones ;; esac
+  [[ " flow rows columns zones gaming outline lazyvim omarchy " == *" $layout "* && -n $layout ]] && LAYOUT=$layout
 fi
 
 # --- keyboard geometry ----------------------------------------------------
@@ -106,6 +108,8 @@ KEY_MAP='
 1 11 main -
 1 12 main =
 1 13.5 mod Backspace
+1 15.5 nav DEL
+1 15.5 nav Del
 1 15.5 nav Insert
 1 16.5 nav Home
 1 17.5 nav Page Up
@@ -176,6 +180,8 @@ KEY_MAP='
 5 10.75 mod Right Alt
 5 12 mod Right Windows
 5 12 mod Right Fn
+5 12 mod Fn
+5 2 mod Left Fn
 5 13 mod Menu
 5 14.25 mod Right Control
 5 15.5 nav Left Arrow
@@ -250,11 +256,11 @@ wallpaper_palette() {
 #   3. a near-duplicate of a colour already taken (hue within 12 degrees,
 #      saturation and lightness within 25 points) is skipped — most themes
 #      make their accent one of the named colours, and it lights once.
-# A grey theme yields nothing and the caller falls back to the accent alone.
+# Missing automatic palette slots are derived in HSL; alpha is opaque for LEDs.
 theme_order() {
   local wallpaper
   wallpaper=$(wallpaper_palette)
-  { theme_variables; ansi_palette_variables; } | WALLPAPER="$wallpaper" awk '
+  { theme_variables; ansi_palette_variables; } | WALLPAPER="$wallpaper" awk -v target="${1:-0}" '
     function hex_value(char) { return index("0123456789abcdef", tolower(char)) - 1 }
     function channel(hex, idx) { return hex_value(substr(hex, idx, 1)) * 16 + hex_value(substr(hex, idx + 1, 1)) }
     # HSL: hue in degrees, saturation and lightness 0..100
@@ -271,6 +277,20 @@ theme_order() {
       else hue = 60 * ((r - g) / d + 4)
       if (hue < 0) hue += 360
     }
+    function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v) }
+    function to_hex(h, s, l,   c, x, m, r, g, b) {
+      s /= 100; l /= 100
+      c = (1 - abs(2 * l - 1)) * s
+      x = c * (1 - abs((h / 60) % 2 - 1)); m = l - c / 2
+      r = g = b = 0
+      if (h < 60) { r = c; g = x }
+      else if (h < 120) { r = x; g = c }
+      else if (h < 180) { g = c; b = x }
+      else if (h < 240) { g = x; b = c }
+      else if (h < 300) { r = x; b = c }
+      else { r = c; b = x }
+      return sprintf("%02x%02x%02x", int((r+m)*255+.5), int((g+m)*255+.5), int((b+m)*255+.5))
+    }
     function hue_gap(a, b,   d) { d = a - b; if (d < 0) d = -d; return d > 180 ? 360 - d : d }
     function abs(x) { return x < 0 ? -x : x }
     BEGIN {
@@ -285,6 +305,7 @@ theme_order() {
     $1 == "background" || $1 == "foreground" { next }
     {
       analyse($2)
+      if ($1 == "accent" || seed == "") seed = $2
       if (sat < 15 || lig < 15 || lig > 90) next
       n++; name[n] = $1; hex[n] = $2; h[n] = hue; s[n] = sat; l[n] = lig
       vivid[n] = sat * (1 - abs(lig - 50) / 50)
@@ -318,6 +339,30 @@ theme_order() {
         out++; oh[out] = h[i]; os[out] = s[i]; ol[out] = l[i]
         print hex[i]
       }
+      if (out < target && seed != "") {
+        # Keep all original colours untouched; synthesize only missing slots.
+        if (out == 0) {
+          print seed; analyse(seed)
+          out = 1; oh[out] = hue; os[out] = sat; ol[out] = lig
+        }
+        analyse(seed)
+        baseh = sat < 15 ? 210 : hue
+        bases = clamp(sat, 45, 75); basel = clamp(lig, 40, 65)
+        while (out < target) {
+          # Pick the widest available hue gap, anchored to the theme hue.
+          bestgap = -1
+          for (a = 1; a <= 24; a++) {
+            candidate = (baseh + a * 15) % 360; gap = 360
+            for (j = 1; j <= out; j++) {
+              d = hue_gap(candidate, oh[j]); if (d < gap) gap = d
+            }
+            if (gap > bestgap) { bestgap = gap; chosen = candidate }
+          }
+          generated = to_hex(chosen, bases, basel)
+          print generated; analyse(generated)
+          out++; oh[out] = hue; os[out] = sat; ol[out] = lig
+        }
+      }
     }
   '
 }
@@ -325,7 +370,7 @@ theme_order() {
 # The first `count` colours of the theme order.
 theme_colors() {
   local count="$1" all=()
-  mapfile -t all < <(theme_order)
+  mapfile -t all < <(theme_order "$count")
   (( ${#all[@]} > 0 )) || return
   printf '%s\n' "${all[@]:0:count}"
 }
@@ -364,6 +409,36 @@ scale_color() {
   '
 }
 
+# Gaming keeps theme hues but makes emphasis keys vivid against a dim base.
+# This treatment precedes the shared brightness scaling.
+gaming_color() {
+  awk -v hex="$1" -v base="$2" '
+    function hv(c) {return index("0123456789abcdef",tolower(c))-1}
+    function abs(v) {return v<0 ? -v : v}
+    BEGIN {
+      r=(hv(substr(hex,1,1))*16+hv(substr(hex,2,1)))/255
+      g=(hv(substr(hex,3,1))*16+hv(substr(hex,4,1)))/255
+      b=(hv(substr(hex,5,1))*16+hv(substr(hex,6,1)))/255
+      if(base) {printf "%02x%02x%02x\n",int(r*255*.35+.5),int(g*255*.35+.5),int(b*255*.35+.5);exit}
+      mx=r;if(g>mx)mx=g;if(b>mx)mx=b
+      mn=r;if(g<mn)mn=g;if(b<mn)mn=b
+      d=mx-mn;l=(mx+mn)/2
+      sat=d==0 ? 0 : d/(1-abs(mx+mn-1))
+      if(d==0)h=210
+      else if(mx==r)h=60*(g-b)/d
+      else if(mx==g)h=60*((b-r)/d+2)
+      else h=60*((r-g)/d+4)
+      if(h<0)h+=360
+      sat=.8+.15*sat;l=.48+.14*l
+      c=(1-abs(2*l-1))*sat;x=c*(1-abs((h/60)%2-1));m=l-c/2
+      r=g=b=0
+      if(h<60){r=c;g=x}else if(h<120){r=x;g=c}else if(h<180){g=c;b=x}
+      else if(h<240){g=x;b=c}else if(h<300){r=x;b=c}else{r=c;b=x}
+      printf "%02x%02x%02x\n",int((r+m)*255+.5),int((g+m)*255+.5),int((b+m)*255+.5)
+    }
+  '
+}
+
 # The colours every device lights, one per line, already through the
 # brightness.
 all_stops() {
@@ -379,9 +454,44 @@ all_stops() {
     colors=("$color")
   fi
 
+  # Gaming needs base/Escape, movement, actions and five separate skill keys.
+  # Preserve deliberate single-colour mode; complete multi-colour palettes.
+  if [[ $LAYOUT == gaming ]] && (( ${#colors[@]} > 1 && ${#colors[@]} < 8 )); then
+    local extra existing duplicate
+    while read -r extra; do
+      duplicate=0
+      for existing in "${colors[@]}"; do
+        [[ $existing == "$extra" ]] && duplicate=1
+      done
+      (( duplicate )) || colors+=("$extra")
+      (( ${#colors[@]} >= 8 )) && break
+    done < <(theme_colors 8)
+  fi
+
+  local palette_index=0 is_native scaled native_hex
+  native_hex=" $({ theme_variables; ansi_palette_variables; } | awk '{print $2}' | paste -sd' ') "
   for color in "${colors[@]}"; do
-    scale_color "$color"
+    is_native=0
+    [[ $native_hex == *" $color "* ]] && is_native=1
+    if [[ $LAYOUT == gaming ]] && (( ${#colors[@]} > 1 )); then
+      color=$(gaming_color "$color" "$(( palette_index == 0 ))")
+    fi
+    scaled=$(scale_color "$color")
+    if [[ ${1:-} == tagged ]]; then
+      printf '%s %s\n' "$scaled" "$is_native"
+    else
+      echo "$scaled"
+    fi
+    palette_index=$((palette_index + 1))
   done
+}
+
+load_stops() {
+  local hex original
+  STOPS=(); ORIGINS=()
+  while read -r hex original; do
+    STOPS+=("$hex"); ORIGINS+=("$original")
+  done < <(all_stops tagged)
 }
 
 # "desk a,b,c" and "ambient a": the desk palette and ambient accent,
@@ -404,28 +514,6 @@ case ${1:-} in
 esac
 
 # --- apply ----------------------------------------------------------------
-
-command -v openrgb >/dev/null 2>&1 || exit 0
-
-mapfile -t STOPS < <(all_stops)
-(( ${#STOPS[@]} > 0 )) || exit 0
-
-# Runs openrgb with its output kept in the log; the exit status is the
-# caller's to report (124 is the timeout).
-openrgb_call() {
-  timeout "$OPENRGB_TIMEOUT" openrgb "$@" >"$LOG_FILE" 2>&1
-}
-
-# Detection runs once and every apply is bounded, so a missing server or a
-# slow scan never stalls the theme switch.
-list_option=--list-devices
-devices=$(timeout "$OPENRGB_TIMEOUT" openrgb "$list_option" 2>/dev/null || true)
-# OpenRGB 1.1 separates the short device list from its detailed listing.
-# Older versions already return details with --list-devices.
-if [[ -n $devices && $devices != *"  Type:"* ]]; then
-  list_option=--list-detailed
-  devices=$(timeout "$OPENRGB_TIMEOUT" openrgb "$list_option" 2>/dev/null || true)
-fi
 
 # One "<id>|<mode>|<leds>|<name>|<type>|<zones>|<multi>|<led names>" line per
 # device: mode is the device's own gradient effect if it has one (single mode
@@ -521,7 +609,7 @@ device_info() {
 # cycling through the stops. A key the map does not know, and a blank cell,
 # keep their flow colour. An unknown count sends the stops as they are.
 led_colors() {
-  local count="$1" names="$2" device="${3:-}"
+  local count="$1" names="$2" device="${3:-}" output="${4:-colors}"
 
   if (( count < 1 )); then
     IFS=, ; echo "${STOPS[*]}"; return
@@ -530,10 +618,30 @@ led_colors() {
   # The key map and LED names carry backslashes (the "\ (ANSI)" key), which
   # awk -v would treat as escapes; ENVIRON hands them over untouched.
   KEY_MAP="$KEY_MAP" LED_NAMES="$names" \
-  awk -v count="$count" -v stops="$(IFS=,; echo "${STOPS[*]}")" -v layout="$LAYOUT" -v device="$device" -v zone_names="$KEY_ZONES" '
+  awk -v origins="$(IFS=,; echo "${ORIGINS[*]}")" -v device="$device" -v output="$output" -v count="$count" -v stops="$(IFS=,; echo "${STOPS[*]}")" -v layout="$LAYOUT" -v zone_names="$KEY_ZONES" '
+    function hv(c) { return index("0123456789abcdef", tolower(c)) - 1 }
+    function linear(v) { return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ^ 2.4 }
+    function lab(hex, n,   r,g,b,l,m,s) {
+      r = linear((hv(substr(hex,1,1))*16+hv(substr(hex,2,1)))/255)
+      g = linear((hv(substr(hex,3,1))*16+hv(substr(hex,4,1)))/255)
+      b = linear((hv(substr(hex,5,1))*16+hv(substr(hex,6,1)))/255)
+      l = (.4122214708*r+.5363325363*g+.0514459929*b) ^ (1/3)
+      m = (.2119034982*r+.6806995451*g+.1073969566*b) ^ (1/3)
+      s = (.0883024619*r+.2817188376*g+.6299787005*b) ^ (1/3)
+      light[n]=.2104542553*l+.793617785*m-.0040720468*s
+      aa[n]=1.9779984951*l-2.428592205*m+.4505937099*s
+      bb[n]=.0259040371*l+.7827717662*m-.808675766*s
+    }
+    function cost(   a,b,total) {
+      total=0
+      for (a=0;a<k;a++) for(b=a+1;b<k;b++)
+        if (edge[a,b]) total += edge[a,b] / (.002 + delta[paint[a],paint[b]])
+      return total
+    }
     BEGIN {
       keymap = ENVIRON["KEY_MAP"]; names = ENVIRON["LED_NAMES"]
       k = split(stops, stop, ",")
+      split(origins, original, ",")
       split(names, led, "\t")
       nz = split(zone_names, zone_list, " ")
       for (i = 1; i <= nz; i++) zone_index[zone_list[i]] = i - 1
@@ -544,37 +652,224 @@ led_colors() {
         key = substr(lines[i], length(f[1]) + length(f[2]) + length(f[3]) + 4)
         row[key] = f[1] + 0; col[key] = f[2] + 0; zone[key] = f[3]
       }
-      row_count = 6
-      if (device == "IQUNIX EV63") {
-        # This compact board has five rows; Escape shares the number row
-        # and Delete sits beside Up, rather than in a navigation cluster.
-        for (key in row) row[key]--
-        row["Escape"] = 0
-        row["Delete"] = 3
-        row_count = 5
+      # Infer only from keys actually present. A compact board without a
+      # function row places Escape alongside the number row.
+      hasfn = 0
+      for (i=1;i<=count;i++) if (led[i] ~ /^Key: F([1-9]|1[0-2])$/) hasfn=1
+      if (!hasfn) row["Escape"]=1
+      if (device == "IQUNIX EV63") row["Delete"]=4
+      mincol=1000; maxcol=0; top=6; bottom=-1
+      for(i=1;i<=count;i++) {
+        key=led[i]; sub(/^Key: /,"",key)
+        if(led[i] !~ /^Key: / || !(key in row)) continue
+        present[row[key]]=1
+        if(col[key]<mincol) mincol=col[key]
+        if(col[key]>maxcol) maxcol=col[key]
+        if(zone[key]!="nav" && zone[key]!="numpad") {
+          if(row[key]<top) top=row[key]
+          if(row[key]>bottom) bottom=row[key]
+          r=row[key]
+          if(!(r in leftedge) || col[key]<leftedge[r]) leftedge[r]=col[key]
+          if(!(r in rightedge) || col[key]>rightedge[r]) rightedge[r]=col[key]
+        }
       }
-      # Spread columns over the keys this board actually has.
-      maxcol = 0
-      for (i = 1; i <= count; i++) {
-        key = led[i]; sub(/^Key: /, "", key)
-        if (led[i] ~ /^Key: / && (key in col) && col[key] > maxcol) maxcol = col[key]
-      }
+      nrows=0
+      for(r=0;r<=5;r++) if(present[r]) rowrank[r]=nrows++
       for (i = 0; i < count; i++) {
         s = int(i * k / count)
         name = led[i + 1]
         key = name; sub(/^Key: /, "", key)
+        if (layout ~ /^(gaming|outline|lazyvim|omarchy)$/ && name ~ /^Key: /) s = 0
         if (layout == "zones" && name ~ /[Ll]ogo/) s = zone_index["logo"] % k
         else if (name ~ /^Key: / && (key in row)) {
-          if (layout == "rows") s = int(row[key] * k / row_count)
-          else if (layout == "columns" && maxcol > 0) { s = int(col[key] / maxcol * k); if (s >= k) s = k - 1 }
+          if (layout == "rows") s = int(rowrank[row[key]] * k / nrows)
+          else if (layout == "columns" && maxcol > mincol) { s = int((col[key]-mincol) / (maxcol-mincol) * k); if (s >= k) s = k - 1 }
           else if (layout == "zones") s = zone_index[zone[key]] % k
+          else if (layout ~ /^(gaming|outline|lazyvim|omarchy)$/) {
+            # First stop is the base; subsequent stops are semantic accents.
+            s = 0
+            if (layout == "gaming") {
+              if (key ~ /^(W|A|S|D)$/ || key ~ / Arrow$/) s = 1
+              else if (key ~ /^(Space|Left Shift|Left Control)$/) s = 2
+              else if (key ~ /^[1-5]$/) s = 2 + key
+              else if (key == "Q") s = 3
+              else if (key == "E") s = 4
+              else if (key == "R") s = 5
+              else if (key ~ /^(F|G|Enter|Backspace)$/) s = 6
+              else if (key ~ /^(T|I|B|C|Tab)$/) s = 7
+            }
+            if (layout == "outline") {
+              # Frame the main typing block, independent of numpad presence.
+              if (zone[key] != "nav" && zone[key] != "numpad" &&
+                  (row[key] == top || row[key] == bottom || col[key] == leftedge[row[key]] || col[key] == rightedge[row[key]])) s = 1
+            }
+            if (layout == "lazyvim") {
+              if (key ~ /^(H|J|K|L)$/) s = 1
+              else if (key == "Space" || key == "Escape") s = 2
+            }
+            if (layout == "omarchy") {
+              if (key ~ /^(Left|Right) Windows$/) s = 1
+              else if (key ~ /^(Left|Right) (Control|Shift|Alt)$/) s = 2
+              else if (key ~ /^[0-9]$/ || key ~ / Arrow$/ || key == "Tab") s = 3
+              else if ((length(key)==1 && index("`[];,. /-=",key)>0) || key==sprintf("%c",39) || substr(key,1,1)==sprintf("%c",92) || key=="# (ISO)") s = 4
+              else if (key ~ /^(Escape|Fn|Left Fn|Right Fn)$/) s = 5
+              else if (key ~ /^(Delete|DEL|Del|Backspace)$/) s = 6
+              else if (key ~ /^(Enter|Space)$/) s = 7
+            }
+            # With two colours all accents stay distinct from the base.
+            if (layout == "omarchy" && s > 1) s = k > 2 ? 2 + (s - 2) % (k - 2) : 0
+            else if (s > 0) s = k > 1 ? 1 + (s - 1) % (k - 1) : 0
+          }
         }
-        printf "%s%s", (i ? "," : ""), stop[s + 1]
+        slot[i] = s
+        locked[i] = layout == "omarchy" && key ~ /^(Left|Right) Windows$/
+        known[i] = name ~ /^Key: / && (key in row)
+        keyrow[i]=known[i] ? row[key] : -1; keycol[i]=known[i] ? col[key] : -1
+        # Extra palette colours subdivide broad base regions before accents.
+        protected[i] = layout ~ /^(gaming|outline|lazyvim|omarchy)$/ && s > 0
+        position[i] = name ~ /^Key: / && (key in row) ? row[key] * 100 + col[key] : 1000 + i
+        population[s]++
+      }
+      # Every requested colour is represented when there are enough LEDs.
+      # Split the largest region spatially, preserving emphasis where possible.
+      for (missing = 0; missing < k; missing++) {
+        if (population[missing] > 0) continue
+        donor = -1; largest = 1
+        for (pass = 0; pass < 2 && donor < 0; pass++) {
+          for (candidate = 0; candidate < k; candidate++) {
+            eligible = 0
+            for (i = 0; i < count; i++)
+              if (slot[i] == candidate && !locked[i] && (pass || !protected[i])) eligible++
+            if (eligible > largest) { largest = eligible; donor = candidate }
+          }
+        }
+        if (donor < 0) break
+        allow_protected = pass > 1
+        take = original[missing+1] ? int(largest / 2) : 1
+        for (n = 0; n < take; n++) {
+          choice = -1
+          for (i = 0; i < count; i++) {
+            if (slot[i] != donor || locked[i] || (!allow_protected && protected[i])) continue
+            if (choice < 0 || position[i] > position[choice]) choice = i
+          }
+          if (choice < 0) break
+          slot[choice] = missing; population[donor]--; population[missing]++
+        }
+      }
+      # Maximize separation across real neighbouring groups. Oklab distance
+      # avoids treating similar blue/teal RGB values as contrasting colours.
+      for(a=0;a<k;a++) {paint[a]=a;lab(stop[a+1],a)}
+      for(a=0;a<k;a++) for(b=0;b<k;b++)
+        delta[a,b]=(light[a]-light[b])^2+(aa[a]-aa[b])^2+(bb[a]-bb[b])^2
+      for(i=0;i<count;i++) for(j=i+1;j<count;j++) {
+        if(!known[i] || !known[j] || slot[i]==slot[j]) continue
+        dr=keyrow[i]-keyrow[j]; if(dr<0) dr=-dr
+        dc=keycol[i]-keycol[j]; if(dc<0) dc=-dc
+        if((dr==0 && dc<=1.8) || (dr==1 && dc<=.85)) {
+          a=slot[i];b=slot[j];if(a>b){t=a;a=b;b=t}
+          edge[a,b]+=(locked[i] || locked[j]) ? 12 : 1
+        }
+      }
+      # Keep the theme base in slot zero; reorder, never alter, selected hues.
+      # Native theme colours occupy the largest regions. Generated hues are
+      # restricted to the smallest regions; contrast swaps cannot cross this
+      # boundary. Preserve the primary native base in slot zero.
+      native_count=0
+      for(a=0;a<k;a++) if(original[a+1]) native_count++
+      assigned[0]=usedcolour[0]=1
+      for(n=1;n<k && native_count<k;n++) {
+        region=-1
+        for(a=1;a<k;a++) if(!assigned[a] && (region<0 || population[a]>population[region])) region=a
+        colour=-1
+        for(a=1;a<k;a++) if(!usedcolour[a] && original[a+1]) {colour=a;break}
+        if(colour<0) for(a=1;a<k;a++) if(!usedcolour[a]) {colour=a;break}
+        paint[region]=colour;assigned[region]=usedcolour[colour]=1
+      }
+      best=cost()
+      for(iter=0;iter<8;iter++) {
+        ba=bbest=-1; nextcost=best
+        for(a=1;a<k;a++) for(b=a+1;b<k;b++) {
+          if(original[paint[a]+1] != original[paint[b]+1]) continue
+          t=paint[a];paint[a]=paint[b];paint[b]=t
+          score=cost()
+          if(score<nextcost-.000001){nextcost=score;ba=a;bbest=b}
+          t=paint[a];paint[a]=paint[b];paint[b]=t
+        }
+        if(ba<0) break
+        t=paint[ba];paint[ba]=paint[bbest];paint[bbest]=t;best=nextcost
+      }
+      for (i = 0; i < count; i++) {
+        printf "%s%s", (i ? "," : ""), stop[paint[slot[i]] + 1] (output == "preview" ? ":" slot[i] ":" original[paint[slot[i]]+1] : "")
       }
       printf "\n"
     }
   '
 }
+
+# An ANSI reference uses the exact same placement function as real LEDs.
+# This is a schematic, not discovery of the connected keyboard geometry.
+if [[ ${1:-} == preview ]]; then
+  load_stops
+  (( ${#STOPS[@]} > 0 )) || exit 0
+  keyboard_device=""
+  if [[ -s $KEYBOARD_FILE ]]; then
+    IFS= read -r header <"$KEYBOARD_FILE"
+    if [[ $header == DEVICE\|* ]]; then
+      keyboard_device=${header#DEVICE|}
+      names=$(tail -n +2 "$KEYBOARD_FILE")
+    else
+      names=$(cat "$KEYBOARD_FILE")
+    fi
+    source=detected
+  else
+    names=$(awk 'NF && $0 !~ /\(ISO\)$/ && $0 !~ /(Right Fn|Left Fn|mod Fn|nav DEL|nav Del)$/ { key=$0; sub(/^[^ ]+ +[^ ]+ +[^ ]+ +/, "", key); printf "%sKey: %s", (n++ ? "\t" : ""), key }' <<<"$KEY_MAP")
+    source=reference
+  fi
+  count=$(awk -F '\t' '{print NF}' <<<"$names")
+  colors=$(led_colors "$count" "$names" "$keyboard_device" preview)
+  KEY_MAP="$KEY_MAP" LED_NAMES="$names" awk -v device="$keyboard_device" -v colors="$colors" -v source="$source" '
+    BEGIN {
+      split(ENVIRON["KEY_MAP"],lines,"\n")
+      for(i in lines) if(lines[i]!="") {
+        split(lines[i],f," "); key=lines[i];sub(/^[^ ]+ +[^ ]+ +[^ ]+ +/,"",key)
+        row[key]=f[1];col[key]=f[2]
+      }
+      n=split(ENVIRON["LED_NAMES"],names,"\t");split(colors,c,",")
+      hasfn=0
+      for(i=1;i<=n;i++) if(names[i] ~ /^Key: F([1-9]|1[0-2])$/) hasfn=1
+      if(!hasfn) row["Escape"]=1
+      if(device=="IQUNIX EV63") row["Delete"]=4
+      for(i=1;i<=n;i++) {
+        key=names[i];sub(/^Key: /,"",key)
+        if(names[i] !~ /^Key: / || !(key in row)) continue
+        split(c[i],v,":")
+        print row[key] "\t" col[key] "\t" v[1] "\t" key "\t" v[2] "\t" source "\t" v[3]
+      }
+    }'
+  exit 0
+fi
+
+command -v openrgb >/dev/null 2>&1 || exit 0
+
+load_stops
+(( ${#STOPS[@]} > 0 )) || exit 0
+
+# Runs openrgb with its output kept in the log; the exit status is the
+# caller's to report (124 is the timeout).
+openrgb_call() {
+  timeout "$OPENRGB_TIMEOUT" openrgb "$@" >"$LOG_FILE" 2>&1
+}
+
+# Detection runs once and every apply is bounded, so a missing server or a
+# slow scan never stalls the theme switch.
+list_option=--list-devices
+devices=$(timeout "$OPENRGB_TIMEOUT" openrgb "$list_option" 2>/dev/null || true)
+# OpenRGB 1.1 separates the short device list from its detailed listing.
+# Older versions already return details with --list-devices.
+if [[ -n $devices && $devices != *"  Type:"* ]]; then
+  list_option=--list-detailed
+  devices=$(timeout "$OPENRGB_TIMEOUT" openrgb "$list_option" 2>/dev/null || true)
+fi
 
 # Without a running OpenRGB server every CLI invocation re-probes all the
 # hardware, which takes seconds per call. `-d` may repeat within one command,
@@ -586,6 +881,8 @@ led_colors() {
 # hardware this was verified against they stay put. Brightness is already in
 # the colour values, so modes run at full brightness.
 mkdir -p "$(dirname "$DEVICES_FILE")"
+device_info | awk -F'|' '$5 == "Keyboard" && $8 ~ /Key: / {print "DEVICE|" $4; print $8; exit}' >"$KEYBOARD_FILE.new"
+mv "$KEYBOARD_FILE.new" "$KEYBOARD_FILE"
 device_info | awk -F'|' -v order="$DEVICE_TYPE_ORDER" '
   BEGIN { n = split(order, types, " "); for (i = 1; i <= n; i++) rank[types[i]] = i }
   { r = ($5 in rank) ? rank[$5] : n + 1; printf "%03d %03d %s|%s|%s|%s\n", r, NR, $1, $4, $3, $5 }

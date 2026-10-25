@@ -222,12 +222,27 @@ else
   fail "5 and 8 colours carry on" "$five / $(stops)"
 fi
 
-# --- missing config means 5 colours ---------------------------------------
+# --- missing config means 8 colours ---------------------------------------
 rm "$home/.config/omarchy/theme-rgb.json"
-if [[ $(stops) == 0000ff,ff0000,ff8000,ffff00,00ff00 ]]; then
-  pass "missing config means 5 colours"
+if [[ $(stops) == 0000ff,ff0000,ff8000,ffff00,00ff00,00ffff,0080ff,ff00ff ]]; then
+  pass "missing config means 8 colours"
 else
-  fail "missing config means 5 colours" "$(stops)"
+  fail "missing config means 8 colours" "$(stops)"
+fi
+
+# Default placement must agree with explicit Omarchy, not only its palette.
+OPENRGB_LIST_DEVICES="4: Test Keyboard
+  Type: Keyboard
+  LEDs: 'Key: Left Windows' 'Key: Left Control' 'Key: 1' 'Key: A' 'Key: B' 'Key: C' 'Key: D' 'Key: E'" run_apply
+default_calls=$(cat "$calls")
+set_config '{"layout":"omarchy"}'
+OPENRGB_LIST_DEVICES="4: Test Keyboard
+  Type: Keyboard
+  LEDs: 'Key: Left Windows' 'Key: Left Control' 'Key: 1' 'Key: A' 'Key: B' 'Key: C' 'Key: D' 'Key: E'" run_apply
+if [[ $(cat "$calls") == "$default_calls" ]]; then
+  pass "missing config defaults to Omarchy layout"
+else
+  fail "missing config defaults to Omarchy layout" "$(cat "$calls")"
 fi
 
 # --- ANSI-only themes still provide a palette -----------------------------
@@ -269,7 +284,7 @@ fi
 # blue is full-strength, red dark but saturated, magenta pale: blue, red, magenta.
 printf 'accent = "#00ff00"\nred = "#602020"\nmagenta = "#c090c0"\nblue = "#0080ff"\n' >"$theme/colors.toml"
 set_config '{"mode": "palette", "colors": 5}'
-if [[ $(stops) == 00ff00,0080ff,602020,c090c0 ]]; then
+if [[ $(stops) == 00ff00,0080ff,602020,c090c0,dfdf20 ]]; then
   pass "with no wallpaper colour, the vivid come before the muted"
 else
   fail "with no wallpaper colour, the vivid come before the muted" "$(stops)"
@@ -286,7 +301,7 @@ printf '   7000: (200,30,30) #C81E1E srgb(200,30,30)\n   2000: (30,30,200) #1E1E
 SH
 chmod +x "$mock_bin/magick"
 printf 'accent = "#00ff00"\nblue = "#0080ff"\nyellow = "#ffff00"\nred = "#ff4040"\n' >"$theme/colors.toml"
-if [[ $(stops) == 00ff00,ff4040,0080ff,ffff00 ]]; then
+if [[ $(stops) == 00ff00,ff4040,0080ff,ffff00,af20df ]]; then
   pass "the wallpaper's colours come first"
 else
   fail "the wallpaper's colours come first" "$(stops)"
@@ -296,7 +311,7 @@ rm "$mock_bin/magick" "$home/.local/state/omarchy/current/background"
 # --- greys and dark tones are left out ------------------------------------
 printf 'accent = "#0000ff"\nred = "#ff0000"\ncyan = "#808080"\ngreen = "#002200"\nyellow = "#ffff00"\n' >"$theme/colors.toml"
 set_config '{"mode": "palette", "colors": 5}'
-if [[ $(stops) == 0000ff,ff0000,ffff00 ]]; then
+if [[ $(stops) == 0000ff,ff0000,ffff00,20df80,df20df ]]; then
   pass "greys and dark tones are left out"
 else
   fail "greys and dark tones are left out" "$(stops)"
@@ -306,7 +321,7 @@ fi
 # blue and green sit on the accent; yellow sits on orange: three bands, not six.
 printf 'accent = "#0000ff"\nblue = "#0010ff"\ngreen = "#1000ff"\nyellow = "#ffff00"\norange = "#fff000"\nred = "#ff0000"\n' >"$theme/colors.toml"
 set_config '{"mode": "palette", "colors": 8}'
-if [[ $(stops) == 0000ff,ff0000,fff000 ]]; then
+if [[ $(stops) == 0000ff,ff0000,fff000,20df80,df20df,50df20,20afdf,8020df ]]; then
   pass "near-duplicates collapse to one"
 else
   fail "near-duplicates collapse to one" "$(stops)"
@@ -315,18 +330,18 @@ fi
 # --- background and foreground never join a tier -------------------------
 printf 'accent = "#0000ff"\nbackground = "#00ff00"\nforeground = "#ff0000"\nyellow = "#ffff00"\n' >"$theme/colors.toml"
 set_config '{"mode": "palette", "colors": 5}'
-if [[ $(stops) == 0000ff,ffff00 ]]; then
+if [[ $(stops) == 0000ff,ffff00,df2080,20df80,df5020 ]]; then
   pass "background and foreground never join a tier"
 else
   fail "background and foreground never join a tier" "$(stops)"
 fi
 
-# --- a grey theme lights the accent alone ---------------------------------
+# --- a grey theme keeps its accent and gains derived colours ---------------------------------
 printf 'accent = "#8d8d8d"\nred = "#a4a4a4"\nblue = "#9b9b9b"\n' >"$theme/colors.toml"
-if [[ $(stops) == 8d8d8d ]]; then
-  pass "a grey theme lights the accent alone"
+if [[ $(stops) == 8d8d8d,5ac0c0,8d5ac0,8dc05a,5a73c0 ]]; then
+  pass "a grey theme keeps its accent and gains derived colours"
 else
-  fail "a grey theme lights the accent alone" "$(stops) / $(stops ambient)"
+  fail "a grey theme keeps its accent and gains derived colours" "$(stops) / $(stops ambient)"
 fi
 
 # --- the desk gets the bands, everything else the accent, in one call -----
@@ -347,7 +362,7 @@ OPENRGB_LIST_DEVICES='0: ENE DRAM
   Type:           Keyboard
   Modes: [Direct] Static
   LEDs: a b c d e ' run_apply
-if called 'openrgb -d 0 -m static -c 0000ff -b 100 -d 1 -m direct -c 0000ff,0000ff,ffff00,00ff00,ff00ff'; then
+if called 'openrgb -d 0 -m static -c 0000ff -b 100 -d 1 -m direct -c 0000ff,ffff00,00ff00,ff00ff,df2020'; then
   pass "the desk gets the bands, everything else the accent, in one call"
 else
   fail "the desk gets the bands, everything else the accent, in one call" "$(cat "$calls")"
@@ -355,7 +370,7 @@ fi
 
 # --- failed detection broadcasts the colours ------------------------------
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" OPENRGB_LIST_FAIL=1 run_apply
-if called 'openrgb -c 0000ff,ffff00,00ff00,ff00ff'; then
+if called 'openrgb -c 0000ff,ffff00,00ff00,ff00ff,df2020'; then
   pass "failed detection broadcasts the colours"
 else
   fail "failed detection broadcasts the colours" "$(cat "$calls")"
@@ -446,10 +461,33 @@ fi
 # a dark background is a dark glow, not a computed bright hue.
 printf 'accent = "#d84a33"\nbackground = "#11111b"\n' >"$theme/colors.toml"
 set_config '{"mode": "palette", "colors": 3}'
-if [[ $(stops) == d84a33 ]]; then
+if [[ $(stops) == d84a33,33c1d8,9d33d8 ]]; then
   pass "colours are sent exactly as the theme defines them"
 else
   fail "colours are sent exactly as the theme defines them" "$(stops)"
+fi
+
+# Generated palettes are deterministic, unique, opaque and scaled only once.
+set_config '{"mode":"palette","colors":8}'
+full_palette=$(stops)
+if [[ $(tr ',' '\n' <<<"$full_palette" | sort -u | wc -l) == 8 && $(stops) == "$full_palette" ]] &&
+   [[ $full_palette =~ ^[0-9a-f]{6}(,[0-9a-f]{6}){7}$ ]]; then
+  pass "HSLA completion produces eight unique deterministic RGB colours"
+else
+  fail "HSLA completion produces eight unique deterministic RGB colours" "$full_palette"
+fi
+set_config '{"mode":"palette","colors":8,"brightness":50}'
+expected_scaled=$(node -e 'console.log(process.argv[1].split(",").map(c=>c.match(/../g).map(x=>Math.floor(parseInt(x,16)*.5+.5).toString(16).padStart(2,"0")).join("")).join(","))' "$full_palette")
+if [[ $(stops) == "$expected_scaled" ]]; then
+  pass "derived colours share the preview brightness scaling"
+else
+  fail "derived colours share the preview brightness scaling" "$(stops)"
+fi
+set_config '{"mode":"single"}'
+if [[ $(stops) == d84a33 ]]; then
+  pass "single colour never synthesizes extra hues"
+else
+  fail "single colour never synthesizes extra hues" "$(stops)"
 fi
 
 # --- bands: LEDs split evenly, remainder goes to the last colours ---------
@@ -478,7 +516,7 @@ OPENRGB_LIST_DEVICES='4: Razer Blackwidow V3
   Modes: [Direct] Static
   Zones: Keyboard
   LEDs: '"'"'Key: Space'"'"' '"'"'Key: Escape'"'"' '"'"'Key: A'"'"' '"'"'Key: 1'"'"' '"'"'Key: Z'"'"' '"'"'Key: Q'"'"' ' run_apply
-if called 'openrgb -d 4 -m direct -c 0000ff,ff0000,00ff00,ff0000,0000ff,00ff00'; then
+if called 'openrgb -d 4 -m direct -c 00ff00,ff0000,0000ff,ff0000,0000ff,ff0000'; then
   pass "rows: the six key rows split top to bottom"
 else
   fail "rows: the six key rows split top to bottom" "$(cat "$calls")"
@@ -536,6 +574,205 @@ else
   fail "zones on another device colour its OpenRGB zones in turn" "$(cat "$calls")"
 fi
 
+cp "$theme/colors.toml" "$tmp/layout-colors.bak"
+printf 'red = "#ff0000"\ngreen = "#00ff00"\nblue = "#0000ff"\nyellow = "#ffff00"\nmagenta = "#ff00ff"\n' >"$theme/colors.toml"
+# Semantic layouts: same deliberately shuffled LED list for every preset.
+# Five colours make every accent group independently observable.
+while read -r preset expected; do
+  set_config "{\"mode\":\"custom\",\"custom\":[\"red\",\"green\",\"blue\",\"yellow\",\"magenta\"],\"layout\":\"$preset\"}"
+  OPENRGB_LIST_DEVICES="4: Test Keyboard
+  Type: Keyboard
+  LEDs: 'Key: W' 'Key: Escape' 'Key: Space' 'Key: F1' 'Key: F5' 'Key: F12' 'Key: Left Control' 'Key: Left Arrow' 'Key: Home' 'Key: C' 'Key: H' 'Key: I' 'Key: B'" run_apply
+  if called "openrgb -d 4 -m static -c $expected"; then
+    pass "key accents: $preset"
+  else
+    fail "key accents: $preset" "$(cat "$calls")"
+  fi
+done <<'CASES'
+gaming 1ff91f,590000,f9f91f,f58d24,24f5f5,f91ff9,f9f91f,1ff91f,f91ff9,1f1ff9,8df524,1f1ff9,1f1ff9
+outline ff00ff,00ff00,ffff00,00ff00,00ff00,ff00ff,ffff00,0000ff,ff0000,ffff00,ffff00,ff00ff,ffff00
+lazyvim ff00ff,ffff00,ffff00,ff0000,ff0000,ff0000,0000ff,0000ff,ff00ff,0000ff,00ff00,0000ff,0000ff
+omarchy ff0000,ff00ff,0000ff,ff0000,ff0000,ff0000,ff00ff,00ff00,ff0000,ffff00,ffff00,ffff00,ffff00
+CASES
+set_config '{"mode":"custom","custom":["red","green"],"layout":"omarchy"}'
+OPENRGB_LIST_DEVICES="4: Test Keyboard
+  Type: Keyboard
+  LEDs: 'Key: Left Windows' 'Key: Right Windows' 'Key: Left Shift' 'Key: 1' 'Key: Space' 'Key: B'" run_apply
+if called 'openrgb -d 4 -m static -c 00ff00,00ff00,ff0000,ff0000,ff0000,ff0000'; then
+  pass "Omarchy: Super, modifiers and workspaces accented; Space stays in base"
+else
+  fail "Omarchy: Super, modifiers and workspaces accented; Space stays in base" "$(cat "$calls")"
+fi
+
+# Each layout must use every palette colour on the full keyboard reference.
+# No hardware discovery or writes are allowed for the reference probe.
+for preset in flow rows columns zones gaming outline lazyvim omarchy; do
+  for amount in 1 3 5 8; do
+    if [[ $amount == 1 ]]; then
+      set_config "{\"mode\":\"single\",\"layout\":\"$preset\"}"
+    else
+      set_config "{\"mode\":\"palette\",\"colors\":$amount,\"layout\":\"$preset\"}"
+    fi
+    rm -f "$home/.local/state/omarchy/theme-rgb/keyboard-leds"
+    : >"$calls"
+    reference=$(HOME="$home" CALL_LOG="$calls" PATH="$mock_bin:$PATH" "$APPLY" preview)
+    actual=$(cut -f3 <<<"$reference" | sort -u | paste -sd,)
+    expected=$(stops | tr ',' '\n' | sort -u | paste -sd,)
+    expected_amount=$amount
+    if [[ $preset == gaming && $amount != 1 ]]; then expected_amount=8; fi
+    if [[ $actual == "$expected" && $(cut -f3 <<<"$reference" | sort -u | wc -l) == "$expected_amount" && ! -s $calls ]]; then
+      pass "$preset uses all $amount colours in the hardware-free reference"
+    else
+      fail "$preset uses all $amount colours in the hardware-free reference" "$actual / $expected"
+    fi
+    # Verify the actual OpenRGB argument list too, with discovery in a
+    # different LED order and without ANSI quote-key token ambiguity.
+    fixture=$(awk -F '\t' '$4 != sprintf("%c",39) {print $4}' <<<"$reference" | tac | awk '{printf "%cKey: %s%c ",39,$0,39}')
+    OPENRGB_LIST_DEVICES="4: Test Keyboard
+  Type: Keyboard
+  LEDs: $fixture" run_apply
+    hardware_colours=$(awk '{for(i=1;i<=NF;i++) if($i=="-c") {print $(i+1); exit}}' "$calls" | tr ',' '\n' | sort -u | paste -sd,)
+    if [[ $hardware_colours == "$expected" ]]; then
+      pass "$preset sends all $amount colours to OpenRGB in reversed LED order"
+    else
+      fail "$preset sends all $amount colours to OpenRGB in reversed LED order" "$hardware_colours / $expected"
+    fi
+  done
+done
+# Real compact keyboard discovery drives the preview; absent keys never
+# appear or consume a row. Both compact sizes must still use the full palette.
+rm -f "$home/.local/state/omarchy/theme-rgb/keyboard-leds"
+set_config '{"mode":"palette","colors":8,"layout":"omarchy"}'
+full_reference=$(HOME="$home" PATH="$mock_bin:$PATH" "$APPLY" preview)
+for shape in compact60 compact75; do
+  compact_names=$(awk -F '\t' -v shape="$shape" '$2 < (shape == "compact60" ? 15 : 18) && $4 != sprintf("%c",39) && (shape != "compact60" || $4 !~ /^F[0-9]+$/) {print $4}' <<<"$full_reference")
+  fixture=$(awk '{printf "%cKey: %s%c ",39,$0,39}' <<<"$compact_names")
+  for preset in flow rows columns zones gaming outline lazyvim omarchy; do
+    set_config "{\"mode\":\"palette\",\"colors\":8,\"layout\":\"$preset\"}"
+    OPENRGB_LIST_DEVICES="4: Test $shape
+  Type: Keyboard
+  LEDs: $fixture" run_apply
+    detected=$(HOME="$home" PATH="$mock_bin:$PATH" "$APPLY" preview)
+    actual=$(cut -f3 <<<"$detected" | sort -u | paste -sd,)
+    expected=$(stops | tr ',' '\n' | sort -u | paste -sd,)
+    expected_keys=$(sort <<<"$compact_names")
+    actual_keys=$(cut -f4 <<<"$detected" | sort)
+    if [[ $actual == "$expected" && $actual_keys == "$expected_keys" ]] &&
+       [[ $(cut -f6 <<<"$detected" | sort -u) == detected ]]; then
+      pass "$shape $preset: all eight colours, only detected keys"
+    else
+      fail "$shape $preset: all eight colours, only detected keys" "$actual / $expected"
+    fi
+    if [[ $preset == omarchy ]]; then
+      super=$(awk -F '\t' '$4=="Left Windows" {print $3}' <<<"$detected")
+      if [[ -n $super ]] && awk -F '\t' -v colour="$super" '$3==colour && $4!="Left Windows" && $4!="Right Windows" {bad=1} END {exit bad}' <<<"$detected"; then
+        pass "$shape: Super colour is exclusive to Super keys"
+      else
+        fail "$shape: Super colour is exclusive to Super keys" "$super"
+      fi
+    fi
+  done
+done
+# A blue Super next to teal modifiers is intentionally hard to distinguish.
+# The optimizer must improve that boundary using the existing palette.
+cp "$theme/colors.toml" "$tmp/contrast-colors.bak"
+printf 'accent = "#5da602"\nblue = "#417ab3"\ncyan = "#41b3a9"\nyellow = "#eebb6e"\nmagenta = "#882252"\n' >"$theme/colors.toml"
+set_config '{"mode":"custom","custom":["accent","blue","cyan","yellow","magenta"],"layout":"omarchy"}'
+OPENRGB_LIST_DEVICES="4: Contrast Keyboard
+  Type: Keyboard
+  LEDs: $fixture" run_apply
+contrast_reference=$(HOME="$home" PATH="$mock_bin:$PATH" "$APPLY" preview)
+super_colour=$(awk -F '\t' '$4=="Left Windows" {print $3}' <<<"$contrast_reference")
+ctrl_colour=$(awk -F '\t' '$4=="Left Control" {print $3}' <<<"$contrast_reference")
+alt_colour=$(awk -F '\t' '$4=="Left Alt" {print $3}' <<<"$contrast_reference")
+if node -e 'function d(a,b){return [0,2,4].reduce((s,i)=>s+(parseInt(a.slice(i,i+2),16)-parseInt(b.slice(i,i+2),16))**2,0)} const [s,c,a]=process.argv.slice(1); process.exit(s&&c&&a&&Math.min(d(s,c),d(s,a))>2*d("417ab3","41b3a9")?0:1)' "$super_colour" "$ctrl_colour" "$alt_colour"; then
+  pass "Omarchy increases Super separation from both adjacent modifiers"
+else
+  fail "Omarchy increases Super separation from both adjacent modifiers" "$super_colour / $ctrl_colour / $alt_colour"
+fi
+mv "$tmp/contrast-colors.bak" "$theme/colors.toml"
+# Exact user-defined Omarchy semantic groups, including the quote and
+# backslash keys, must survive adaptive placement and palette permutation.
+set_config '{"mode":"palette","colors":8,"layout":"omarchy"}'
+OPENRGB_LIST_DEVICES="4: Group Keyboard
+  Type: Keyboard
+  LEDs: 'Key: A' 'Key: Left Windows' 'Key: Right Windows' 'Key: Left Control' 'Key: 1' 'Key: [' 'Key: ]' 'Key: ;' 'Key: '' 'Key: .' 'Key: /' 'Key: \ (ANSI)' 'Key: -' 'Key: =' 'Key: Escape' 'Key: Fn' 'Key: Right Fn' 'Key: Delete' 'Key: Backspace' 'Key: Enter' 'Key: Space'" run_apply
+groups=$(HOME="$home" PATH="$mock_bin:$PATH" "$APPLY" preview)
+if awk -F '\t' '
+  $4=="[" || $4=="]" || $4==";" || $4==sprintf("%c",39) || $4=="." || $4=="/" || substr($4,1,1)==sprintf("%c",92) || $4=="-" || $4=="=" {if($5!=4)bad=1;punct++}
+  $4=="Escape" || $4=="Fn" || $4=="Right Fn" {if($5!=5)bad=1;fn++}
+  $4=="Delete" || $4=="Backspace" {if($5!=6)bad=1;del++}
+  $4=="Enter" || $4=="Space" {if($5!=7)bad=1;action++}
+  {if(($5 in colours) && colours[$5]!=$3)bad=1;colours[$5]=$3}
+  END {exit bad || punct!=9 || fn!=3 || del!=2 || action!=2}
+' <<<"$groups"; then
+  pass "Omarchy: punctuation, Escape/Fn, Delete/Backspace, Enter/Space pairs"
+else
+  fail "Omarchy: punctuation, Escape/Fn, Delete/Backspace, Enter/Space pairs" "$groups"
+fi
+
+# A theme with only three real hues must keep the large majority of the
+# keyboard native while still displaying all eight colours.
+cp "$theme/colors.toml" "$tmp/native-colors.bak"
+printf 'accent = "#5da602"\nblue = "#417ab3"\nyellow = "#eebb6e"\n' >"$theme/colors.toml"
+set_config '{"mode":"palette","colors":8,"layout":"omarchy"}'
+OPENRGB_LIST_DEVICES="4: Sparse Theme Keyboard
+  Type: Keyboard
+  LEDs: $fixture" run_apply
+native_reference=$(HOME="$home" PATH="$mock_bin:$PATH" "$APPLY" preview)
+if awk -F '\t' '{n++;if($7=="1")native++;seen[$3]=1} END {for(c in seen)colours++;exit !(native/n>=.75 && colours==8)}' <<<"$native_reference"; then
+  pass "derived hues stay on small groups: at least 75% native keys with three theme hues"
+else
+  fail "derived hues stay on small groups: at least 75% native keys with three theme hues" "$native_reference"
+fi
+mv "$tmp/native-colors.bak" "$theme/colors.toml"
+
+# Gaming skills must stay pairwise distinct and separate from Escape,
+# including short automatic/custom palettes and low brightness.
+for settings in '"mode":"palette","colors":3' '"mode":"palette","colors":5' '"mode":"palette","colors":8' '"mode":"custom","custom":["red","green"]' '"mode":"palette","colors":3,"brightness":10'; do
+  set_config "{$settings,\"layout\":\"gaming\"}"
+  OPENRGB_LIST_DEVICES="4: Test Keyboard
+  Type: Keyboard
+  LEDs: 'Key: Escape' 'Key: 1' 'Key: 2' 'Key: 3' 'Key: 4' 'Key: 5' 'Key: W' 'Key: Space'" run_apply
+  skill_colours=$(awk '{for(i=1;i<=NF;i++) if($i=="-c") {print $(i+1); exit}}' "$calls")
+  unique=$(tr ',' '\n' <<<"$skill_colours" | head -6 | sort -u | wc -l)
+  if [[ $unique == 6 ]]; then
+    pass "Gaming: 1–5 and Escape are six distinct colours ($settings)"
+  else
+    fail "Gaming: 1–5 and Escape are six distinct colours ($settings)" "$skill_colours"
+  fi
+done
+# Cover every named FPS/ARPG group while all eight colours are present,
+# so palette completion must not alter the emphasis groups.
+set_config '{"mode":"palette","colors":8,"layout":"gaming"}'
+IFS=, read -r -a palette <<<"$(stops)"
+OPENRGB_LIST_DEVICES="4: Test Keyboard
+  Type: Keyboard
+  LEDs: 'Key: Escape' 'Key: 1' 'Key: 2' 'Key: 3' 'Key: 4' 'Key: 5' 'Key: W' 'Key: Space' 'Key: I' 'Key: B' 'Key: C' 'Key: Enter' 'Key: Backspace' 'Key: Up Arrow' 'Key: Down Arrow' 'Key: Left Arrow' 'Key: Right Arrow' 'Key: Q' 'Key: E' 'Key: R' 'Key: F' 'Key: T' 'Key: G' 'Key: Tab'" run_apply
+actual_groups=$(awk '{for(i=1;i<=NF;i++) if($i=="-c") {print $(i+1); exit}}' "$calls")
+IFS=, read -r -a observed <<<"$actual_groups"
+# First eight keys anchor eight distinct semantic groups; remaining keys
+# must share their intended group, regardless of contrast-driven permutation.
+palette=("${observed[0]}" "${observed[6]}" "${observed[7]}" "${observed[1]}" "${observed[2]}" "${observed[3]}" "${observed[4]}" "${observed[5]}")
+expected_groups=()
+for slot in 0 3 4 5 6 7 1 2 7 7 7 6 6 1 1 1 1 3 4 5 6 7 6 7; do
+  expected_groups+=("${palette[slot]}")
+done
+expected_groups_csv=$(IFS=,; echo "${expected_groups[*]}")
+if called "openrgb -d 4 -m static -c $expected_groups_csv"; then
+  pass "Gaming: movement, five skills, inventory/character, actions and chat groups"
+else
+  fail "Gaming: movement, five skills, inventory/character, actions and chat groups" "$(cat "$calls")"
+fi
+set_config '{"mode":"custom","custom":["red","green"],"layout":"gaming"}'
+vivid_palette=$(stops)
+if node -e 'const c=process.argv[1].split(",");function vivid(hex){const v=hex.match(/../g).map(x=>parseInt(x,16)/255),mx=Math.max(...v),mn=Math.min(...v),l=(mx+mn)/2,s=(mx-mn)/(1-Math.abs(mx+mn-1));return s>=.79&&l>=.475&&l<=.625}process.exit(c[0]==="590000"&&c.slice(1).every(vivid)?0:1)' "$vivid_palette"; then
+  pass "Gaming dims the native base and keeps all emphasis colours vivid"
+else
+  fail "Gaming dims the native base and keeps all emphasis colours vivid" "$vivid_palette"
+fi
+mv "$tmp/layout-colors.bak" "$theme/colors.toml"
+
 # --- rows on a pad is just the flow ---------------------------------------
 set_config '{"mode": "custom", "custom": ["red", "green", "blue"], "layout": "rows"}'
 OPENRGB_LIST_DEVICES='0: Fake Pad
@@ -575,7 +812,7 @@ fi
 OPENRGB_LIST_DEVICES='4: Some Keyboard
   Type:           Keyboard
   LEDs: '"'"'Key: Escape'"'"' '"'"'Key: Mystery'"'"' '"'"'Key: Space'"'"' ' run_apply
-if called 'openrgb -d 4 -m static -c ff0000,00ff00,0000ff'; then
+if called 'openrgb -d 4 -m static -c ff0000,0000ff,00ff00'; then
   pass "an unknown key name falls back to its flow position"
 else
   fail "an unknown key name falls back to its flow position" "$(cat "$calls")"

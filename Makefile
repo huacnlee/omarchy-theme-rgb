@@ -14,7 +14,7 @@ test:
 # holding a `qs` symlink. The onExited exitStatus warning is a known qmllint
 # gap (first-party services trip it too); dynamic lookups through `bar.shell`
 # and `Style.font.*` are typed as plain QObjects and also warn.
-QMLROOT := $(or $(TMPDIR),/tmp)/omarchy-theme-rgb-qmlroot
+QMLROOT := $(HOME)/.cache/omarchy-theme-rgb-qmlroot
 qml-check:
 	mkdir -p $(QMLROOT) && ln -sfn /usr/share/omarchy/shell $(QMLROOT)/qs
 	$(QMLLINT) -I $(QMLROOT) -I /usr/share/omarchy/shell --signal-handler-parameters disable Service.qml Panel.qml components/PanelMenu.qml
