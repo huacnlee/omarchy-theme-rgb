@@ -511,7 +511,7 @@ device_info() {
 # cycling through the stops. A key the map does not know, and a blank cell,
 # keep their flow colour. An unknown count sends the stops as they are.
 led_colors() {
-  local count="$1" names="$2"
+  local count="$1" names="$2" device="${3:-}"
 
   if (( count < 1 )); then
     IFS=, ; echo "${STOPS[*]}"; return
@@ -520,7 +520,7 @@ led_colors() {
   # The key map and LED names carry backslashes (the "\ (ANSI)" key), which
   # awk -v would treat as escapes; ENVIRON hands them over untouched.
   KEY_MAP="$KEY_MAP" LED_NAMES="$names" \
-  awk -v count="$count" -v stops="$(IFS=,; echo "${STOPS[*]}")" -v layout="$LAYOUT" -v zone_names="$KEY_ZONES" '
+  awk -v count="$count" -v stops="$(IFS=,; echo "${STOPS[*]}")" -v layout="$LAYOUT" -v device="$device" -v zone_names="$KEY_ZONES" '
     BEGIN {
       keymap = ENVIRON["KEY_MAP"]; names = ENVIRON["LED_NAMES"]
       k = split(stops, stop, ",")
@@ -534,6 +534,15 @@ led_colors() {
         key = substr(lines[i], length(f[1]) + length(f[2]) + length(f[3]) + 4)
         row[key] = f[1] + 0; col[key] = f[2] + 0; zone[key] = f[3]
       }
+      row_count = 6
+      if (device == "IQUNIX EV63") {
+        # This compact board has five rows; Escape shares the number row
+        # and Delete sits beside Up, rather than in a navigation cluster.
+        for (key in row) row[key]--
+        row["Escape"] = 0
+        row["Delete"] = 3
+        row_count = 5
+      }
       # Spread columns over the keys this board actually has.
       maxcol = 0
       for (i = 1; i <= count; i++) {
@@ -546,7 +555,7 @@ led_colors() {
         key = name; sub(/^Key: /, "", key)
         if (layout == "zones" && name ~ /[Ll]ogo/) s = zone_index["logo"] % k
         else if (name ~ /^Key: / && (key in row)) {
-          if (layout == "rows") s = int(row[key] * k / 6)
+          if (layout == "rows") s = int(row[key] * k / row_count)
           else if (layout == "columns" && maxcol > 0) { s = int(col[key] / maxcol * k); if (s >= k) s = k - 1 }
           else if (layout == "zones") s = zone_index[zone[key]] % k
         }
@@ -589,7 +598,7 @@ while IFS="|" read -r id mode leds name type zones multi names; do
         local_args+=(-z "$z" -c "${STOPS[z % ${#STOPS[@]}]}")
       done
     else
-      local_args=(-d "$id" -m "$multi" -c "$(led_colors "$leds" "$names")")
+      local_args=(-d "$id" -m "$multi" -c "$(led_colors "$leds" "$names" "$name")")
     fi
     DEVICE_MODE[$id]=$multi
   else
