@@ -41,21 +41,75 @@ Dependencies: the `openrgb` package (the panel offers to install it), plus
 
 Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
 
-- **Colours** — `1`, `3`, `5` (the default) or `8`. *1* is the accent on
+- **Colours** — `1`, `3`, `5` or `8` (the default). *1* is the accent on
   every device. *3*, *5* and *8* are the first that many of the theme's own
-  colours, in an order the script works out per theme (below). There is
-  nothing to pick by hand: Omarchy is chef's choice.
-- **Layout** — where several colours go. *Flow* lays bands along each
+  colours, in an order the script works out per theme (below). Missing colours
+  are derived from the theme using HSLA.
+- **Layout** — where several colours go. *Omarchy* is the default. *Flow* lays bands along each
   device's LEDs (top to bottom on most keyboards). On keyboards, *Rows* and
   *Columns* place the bands by where each key actually sits, and *Zones*
   colours the function keys, main block, modifiers, navigation cluster,
   numpad and logo in turn; on other devices *Zones* colours each OpenRGB zone
   (a mouse's logo, wheel and strip, say) in turn.
+  Four key-accent layouts keep clear emphasis groups. All layouts use every
+  selected colour when there are enough controllable LEDs. Additional colours
+  subdivide the largest base regions spatially before splitting accent groups;
+  on small boards, emphasis groups may need to share or split colours.
+
+  | Layout | Emphasis groups |
+  | --- | --- |
+  | Gaming | WASD + arrows; Space + left Shift/Ctrl; 1/Q; 2/E; 3/R; 4/F/G/Enter/Backspace; 5/T/I/B/C/Tab; Esc stays in base |
+  | Frame | Outer rows and side keys of the main typing block |
+  | LazyVim | HJKL; Space leader + Esc |
+  | Omarchy | Exclusive Super; Ctrl/Shift/Alt; 0–9/arrows/Tab; punctuation; Esc/Fn; Delete/Backspace; Enter/Space |
+
+  Gaming dims its base to 35% RGB and derives vivid accents with HSL
+  saturation 80–95% and lightness 48–62%, preserving the theme hues. This
+  precedes the normal brightness slider and applies only to multicolour Gaming.
+  Gaming expands multicolour palettes to at least 8 colours, retaining
+  selected hues and filling missing slots from the theme/HSLA palette.
+  This gives 1–5 five distinct colours, all different from Esc. The shared
+  FPS/action-RPG scheme covers movement, weapon/skill slots, actions and panels
+  for CS, POE and Diablo-style use. It is a visual grouping, not a claim that
+  every game binds the same action to each key. Keys grouped in one slot share
+  its colour to keep the palette at 8. Single-colour
+  mode remains solid. Other layouts retain the requested palette size.
+
+  The first colour is the initial base; emphasis groups use the remaining
+  colours, reordered for theme coverage and contrast. Extra colours extend the base. With two colours,
+  emphasis groups share one colour. Unmapped keyboard keys start in the base;
+  non-key LEDs and other devices start in Flow placement. LazyVim and Omarchy
+  are static memory aids, not application detection or a live keybinding parser.
+  User remaps may differ. All layouts are static.
+
+  Old WASD settings migrate to Gaming, Vim to LazyVim, and F1–F12/Arrows to
+  Zones. Frame retains the configuration value `outline`.
+  Native theme colours are assigned to the largest regions; HSLA-completed
+  colours are reserved for the smallest emphasis regions. Contrast optimization
+  only swaps colours within the same origin class, so it cannot move a derived
+  hue into a large native region. Extra derived bands use minimal key groups.
+  Gaming’s saturation treatment
+  keeps native hue identity and its large base stays in the theme hue.
+  Rows span only present rows; Frame follows the present typing block edges.
+  On boards without F1–F12, Escape joins the number row. Columns span the actual
+  detected width. Absent keys never reserve palette slots. Selected colours
+  are reordered per keyboard using Oklab colour distance across neighbouring
+  groups, prioritizing Super’s neighbours. The base colour remains unchanged.
+  Super has an exclusive colour in multicolour Omarchy, including two-colour
+  mode (other emphasis groups then use the base). Matching colours within a
+  deliberate group are retained; exact vendor geometry and limited palettes
+  constrain the achievable separation.
 - **Brightness** — 10–100 %. Scales the colour values themselves, so it
-  works the same in every OpenRGB mode; it is the only change made to what
-  the theme says.
-- **Preview** — the exact colours the LEDs get, as bands.
-- **Devices** — what OpenRGB found on the last sync, with LED counts.
+  works the same in every OpenRGB mode.
+- **Preview** — the shared device palette strip, followed by a keyboard
+  schematic computed by the same placement function as the hardware.
+  After discovery this shows only the first connected keyboard’s detected keys.
+  Key-name positions are inferred from the standard map, not a vendor matrix;
+  unknown/vendor-specific keys may not be drawn. Each keyboard is coloured
+  independently from its own detected LEDs. Before discovery an ANSI reference
+  is shown.
+- **Devices** — collapsed by default, with a device count. Click the heading
+  or activate it with the keyboard to show devices and LED counts.
 
 **Menu** — the `󰇘` button in the header lists *Sync now* and *GitHub*.
 
@@ -92,12 +146,17 @@ many — on the desk. The keyboard, mouse, mousemat, headset and gamepad get
 the bands; everything else (the screen's backlight, strips, RAM,
 motherboard, case) is ambient light and shows the accent alone: one colour
 reads as the theme from across the room, five bands on a monitor's backlight
-do not. A theme with fewer usable colours lights fewer; a grey
-theme lights the accent alone. Changing the wallpaper re-syncs within a few
-seconds. The LEDs get the theme's exact hex values, scaled only by the
+do not. If the theme has fewer usable colours than requested, HSLA-derived
+colours fill the remaining slots. Outside Gaming, existing selected colours retain their exact
+hex values. Derived colours choose the widest remaining hue gap, with saturation
+clamped to 45–75% and lightness to 40–65%. A grey-only theme keeps its accent
+and uses a muted blue starting hue (210°) for the added colours. Alpha is 1
+because OpenRGB LEDs take opaque RGB. Single mode never synthesizes colours. Custom mode keeps its selected colours;
+Gaming completes a multicolour custom selection to 8 as described above. Changing the wallpaper re-syncs within a few
+seconds. Outside Gaming’s explicit emphasis treatment, original theme colours keep their exact hex values; all colours are scaled by the
 brightness setting — no gamma, no mixing toward white.
 
-Several colours always sit in contiguous bands with hard edges between them,
+Colours sit in bands or key groups with hard edges between them,
 never blended. Keyboard: `←`/`→` move within a row (on the brightness row
 they step by 10), `↑`/`↓` between rows, `Enter` picks, `1`–`4` pick a colours
 chip, `r` syncs now, `m` opens the menu, `Esc` closes.
@@ -108,14 +167,15 @@ editing it by hand applies too:
 ```json
 {
   "mode": "palette",
-  "colors": 5,
+  "colors": 8,
   "brightness": 100,
-  "layout": "flow"
+  "layout": "omarchy"
 }
 ```
 
 `mode` is `single` or `palette`, `colors` 3, 5 or 8, `brightness` 10–100 and
-`layout` one of `flow`, `rows`, `columns`, `zones`. For the curious, the
+`layout` one of `flow`, `rows`, `columns`, `zones`, `gaming`,
+`outline`, `lazyvim`, `omarchy`. For the curious, the
 script also honours `"single": "<variable>"` (which theme variable *1*
 lights) and `"mode": "custom"` with `"custom": ["blue", "magenta"]` — neither
 of which the panel exposes.

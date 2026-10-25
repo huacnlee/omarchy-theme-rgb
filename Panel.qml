@@ -22,11 +22,12 @@ Panel {
 
   property var service: null
 
-  // One keyboard cursor: a row ("mode" | "layout" | "brightness") and an
+  // One keyboard cursor: a section (mode, layout, brightness, devices) and an
   // index within it. Pointer hover moves the same cursor.
   property string cursorRow: "mode"
   property int cursorIndex: 0
   property bool cursorActive: false
+  property bool devicesExpanded: false
 
   // The header's "more" menu, once its trailing control has loaded. While it
   // is open the list owns the keys.
@@ -37,15 +38,31 @@ Panel {
   readonly property var modes: [
     { value: "single", label: "1", tooltip: "One theme colour on every device — the accent unless you pick another" },
     { value: "3", label: "3", tooltip: "The accent and the two theme colours closest to the wallpaper" },
-    { value: "5", label: "5", tooltip: "Five of the theme's colours, the wallpaper's first (the default)" },
-    { value: "8", label: "8", tooltip: "Eight of the theme's colours, the wallpaper's first" }
+    { value: "5", label: "5", tooltip: "Five of the theme's colours, the wallpaper's first" },
+    { value: "8", label: "8", tooltip: "Eight of the theme's colours, the wallpaper's first (the default)" }
   ]
 
   readonly property string mode: service ? String(service.mode) : "palette"
-  readonly property string modeValue: mode === "palette" ? String(service ? service.colors : 5) : mode
+  readonly property string modeValue: mode === "palette" ? String(service ? service.colors : 8) : mode
   readonly property var variables: service && service.variables ? service.variables : []
   readonly property var stops: service && service.deskStops ? service.deskStops : []
-  readonly property int colors: service ? service.colors : 5
+  readonly property var keyboardRows: {
+    var keys = service ? service.keyboardPreview : []
+    var rows = []
+    for (var i = 0; i < keys.length; i++) if (rows.indexOf(keys[i].row) < 0) rows.push(keys[i].row)
+    return rows.sort(function(a,b) { return a-b })
+  }
+  readonly property var keyboardBounds: {
+    var keys = service ? service.keyboardPreview : []
+    var lo = 100, hi = 0
+    for (var i = 0; i < keys.length; i++) {
+      var x = keys[i].name === "Space" ? 4.5 : keys[i].column
+      lo = Math.min(lo, x)
+      hi = Math.max(hi, x + (keys[i].name === "Space" ? 5.75 : 1))
+    }
+    return { left: lo === 100 ? 0 : lo, width: Math.max(1, hi-lo) }
+  }
+  readonly property int colors: service ? service.colors : 8
   readonly property var devices: service && service.devices ? service.devices : []
   readonly property int brightness: service ? service.brightness : 100
   readonly property bool openrgbPresent: service ? service.openrgbPresent : false
@@ -62,16 +79,17 @@ Panel {
     if (service.lastSyncFailed) return "Last sync failed"
     return slogan
   }
-  readonly property string layout: service ? String(service.layout) : "flow"
+  readonly property string layout: service ? String(service.layout) : "omarchy"
   readonly property var layouts: [
+    { value: "omarchy", label: "Omarchy", tooltip: "Super; modifiers; navigation; punctuation; Esc/Fn; Delete/Backspace; Enter/Space (default)" },
     { value: "flow", label: "Flow", tooltip: "Bands along the LED order — top to bottom on most keyboards" },
     { value: "rows", label: "Rows", tooltip: "Keyboard rows top to bottom, by where each key sits" },
     { value: "columns", label: "Columns", tooltip: "Left to right across the keyboard, by where each key sits" },
-    { value: "zones", label: "Zones", tooltip: "Function keys, main block, modifiers, navigation, numpad, logo; other devices by their OpenRGB zones" }
+    { value: "zones", label: "Zones", tooltip: "Function keys, main block, modifiers, navigation, numpad, logo; other devices by their OpenRGB zones" },
+    { value: "gaming", label: "Gaming", tooltip: "Movement, skills, inventory and chat across FPS and action RPGs" },
+    { value: "outline", label: "Frame", tooltip: "Frame around the main typing block; navigation and numpad stay in the base" },
+    { value: "lazyvim", label: "LazyVim", tooltip: "HJKL navigation; Space leader and Escape" }
   ]
-  readonly property string layoutHint: stops.length <= 1
-    ? "One colour needs no layout."
-    : stops.length + " colours" + (layout === "zones" ? " over the zones of each device." : " in bands, " + (layout === "flow" ? "along each device's LEDs." : (layout === "rows" ? "top to bottom." : "left to right.")))
   function lookupService() {
     if (!bar || !bar.shell || typeof bar.shell.serviceFor !== "function") return
     var found = bar.shell.serviceFor(moduleName)
@@ -118,7 +136,7 @@ Panel {
     return 0
   }
 
-  readonly property var cursorRows: ["mode", "layout", "brightness"]
+  readonly property var cursorRows: ["mode", "layout", "brightness", "devices"]
 
   function rowLength(row) {
     if (row === "mode") return modes.length
@@ -130,6 +148,19 @@ Panel {
     var rows = cursorRows
     var r = rows.indexOf(cursorRow)
     if (dy !== 0) {
+      if (cursorRow === "layout") {
+        var current = layoutButtons.itemAt(cursorIndex)
+        var best = -1, distance = Infinity
+        if (current) {
+          for (var i = 0; i < layouts.length; i++) {
+            var item = layoutButtons.itemAt(i)
+            if (!item || (item.y - current.y) * dy <= 0) continue
+            var d = Math.abs(item.y - current.y) * 1000 + Math.abs(item.x + item.width / 2 - current.x - current.width / 2)
+            if (d < distance) { distance = d; best = i }
+          }
+        }
+        if (best >= 0) { cursorIndex = best; return }
+      }
       r = Math.max(0, Math.min(rows.length - 1, r + dy))
       cursorRow = rows[r]
       cursorIndex = Math.min(cursorIndex, Math.max(0, rowLength(cursorRow) - 1))
@@ -147,6 +178,7 @@ Panel {
   function activateCursor() {
     if (cursorRow === "mode") chooseMode(modes[cursorIndex].value)
     else if (cursorRow === "layout") chooseLayout(layouts[cursorIndex].value)
+    else if (cursorRow === "devices") devicesExpanded = !devicesExpanded
   }
 
   // Bar icon --------------------------------------------------------------
@@ -184,6 +216,7 @@ Panel {
   onBarChanged: lookupService()
 
   onOpenedChanged: if (opened) {
+    devicesExpanded = false
     lookupService()
     if (service) { service.refreshVariables(); service.refreshStops() }
     cursorActive = false
@@ -201,9 +234,9 @@ Panel {
     bar: themeRgb.bar
     open: themeRgb.opened
     focusTarget: keyCatcher
-    // Wide enough for the five mode chips in one row at any font size; the
+    // Wide enough for the mode chips in one row at any font size; the
     // Row's laid-out width is what the chips actually take.
-    contentWidth: panel.fittedContentWidth(Math.max(Style.space(360), modeGroup.width, layoutGroup.width))
+    contentWidth: panel.fittedContentWidth(Math.max(Style.space(360), modeGroup.width))
     contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(900))
 
     PanelKeyCatcher {
@@ -379,35 +412,35 @@ Panel {
             fontFamily: themeRgb.fontFamily
           }
 
-          ButtonGroup {
+          Flow {
             id: layoutGroup
-            options: themeRgb.layouts
-            value: themeRgb.layout
-            foreground: themeRgb.foreground
-            fontFamily: themeRgb.fontFamily
-            focusable: false
-            cursorIndex: themeRgb.cursorActive && themeRgb.cursorRow === "layout" ? themeRgb.cursorIndex : -1
-            onChanged: function(v) { themeRgb.chooseLayout(v) }
-            // The pointer drives the same cursor the keys move; leaving the chip
-            // it sits on clears it, so nothing stays lit behind the pointer.
-            onHovered: function(index, isHovered) {
-              if (!isHovered) {
-                if (themeRgb.cursorRow === "layout" && themeRgb.cursorIndex === index) themeRgb.cursorActive = false
-                return
-              }
-              themeRgb.cursorActive = true
-              themeRgb.cursorRow = "layout"
-              themeRgb.cursorIndex = index
-            }
-          }
-
-          Text {
             width: parent.width
-            wrapMode: Text.WordWrap
-            text: themeRgb.layoutHint
-            color: themeRgb.dim
-            font.family: themeRgb.fontFamily
-            font.pixelSize: Style.font.caption
+            spacing: Style.spacing.md
+            Repeater {
+              id: layoutButtons
+              model: themeRgb.layouts
+              delegate: Button {
+                required property var modelData
+                required property int index
+                text: modelData.label
+                tooltipText: modelData.tooltip
+                selected: themeRgb.layout === modelData.value
+                bordered: true
+                foreground: themeRgb.foreground
+                fontFamily: themeRgb.fontFamily
+                hasCursor: themeRgb.cursorActive && themeRgb.cursorRow === "layout" && themeRgb.cursorIndex === index
+                onClicked: themeRgb.chooseLayout(modelData.value)
+                onHovered: function(h) {
+                  if (h) {
+                    themeRgb.cursorActive = true
+                    themeRgb.cursorRow = "layout"
+                    themeRgb.cursorIndex = index
+                  } else if (themeRgb.cursorRow === "layout" && themeRgb.cursorIndex === index) {
+                    themeRgb.cursorActive = false
+                  }
+                }
+              }
+            }
           }
         }
 
@@ -451,63 +484,57 @@ Panel {
           }
         }
 
-        // Preview: the stops as bands, the way a strip of LEDs shows them.
-        Repeater {
-          model: [{ label: "", colors: themeRgb.stops }]
-
-          delegate: Item {
-            id: preview
-            required property var modelData
-            width: settings.width
-            height: Style.space(18)
-
-            Text {
-              id: previewLabel
-              anchors.left: parent.left
-              anchors.verticalCenter: parent.verticalCenter
-              width: preview.modelData.label === "" ? 0 : Style.space(52)
-              text: preview.modelData.label
-              color: themeRgb.dim
-              font.family: themeRgb.fontFamily
-              font.pixelSize: Style.font.caption
-            }
-
-            Rectangle {
-              anchors.left: previewLabel.right
-              anchors.right: parent.right
-              anchors.top: parent.top
-              anchors.bottom: parent.bottom
-              color: "transparent"
-              border.width: 1
-              border.color: Qt.rgba(themeRgb.foreground.r, themeRgb.foreground.g, themeRgb.foreground.b, 0.40)
-
-              Row {
-                id: previewRow
-                anchors.fill: parent
-                anchors.margins: 1
-                Repeater {
-                  model: preview.modelData.colors
-                  // Equal bands, rounded down; the last one takes what is
-                  // left so the strip reaches its right edge.
-                  delegate: Rectangle {
-                    required property int index
-                    required property var modelData
-                    readonly property int count: Math.max(1, preview.modelData.colors.length)
-                    readonly property int band: Math.floor(previewRow.width / count)
-                    width: index === count - 1 ? previewRow.width - band * (count - 1) : band
-                    height: previewRow.height
-                    color: modelData
-                  }
-                }
+        // Shared device palette comes before the keyboard-specific preview.
+        Rectangle {
+          width: parent.width
+          height: Style.space(18)
+          visible: themeRgb.stops.length > 0
+          color: "transparent"
+          border.width: 1
+          border.color: Qt.rgba(themeRgb.foreground.r, themeRgb.foreground.g, themeRgb.foreground.b, 0.40)
+          Row {
+            id: paletteRow
+            anchors.fill: parent
+            anchors.margins: 1
+            Repeater {
+              model: themeRgb.stops
+              delegate: Rectangle {
+                required property int index
+                required property var modelData
+                readonly property int count: Math.max(1, themeRgb.stops.length)
+                readonly property int band: Math.floor(paletteRow.width / count)
+                width: index === count - 1 ? paletteRow.width - band * (count - 1) : band
+                height: paletteRow.height
+                color: modelData
               }
+            }
+          }
+        }
 
-              Text {
-                anchors.centerIn: parent
-                visible: preview.modelData.colors.length === 0
-                text: "No colour for this theme"
-                color: themeRgb.dim
-                font.family: themeRgb.fontFamily
-                font.pixelSize: Style.font.caption
+        Column {
+          width: parent.width
+          spacing: Style.spacing.md
+          Text {
+            text: themeRgb.service && themeRgb.service.keyboardDetected ? "KEYBOARD · DETECTED KEYS" : "KEYBOARD REFERENCE · ANSI"
+            textFormat: Text.PlainText
+            color: themeRgb.dim
+            font.family: themeRgb.fontFamily
+            font.pixelSize: Style.font.caption
+          }
+          Item {
+            id: keyboardReference
+            width: parent.width
+            height: Math.max(1, themeRgb.keyboardRows.length) * Style.space(14)
+            readonly property real unit: width / themeRgb.keyboardBounds.width
+            Repeater {
+              model: themeRgb.service ? themeRgb.service.keyboardPreview : []
+              delegate: Rectangle {
+                required property var modelData
+                x: ((modelData.name === "Space" ? 4.5 : modelData.column) - themeRgb.keyboardBounds.left) * keyboardReference.unit
+                y: themeRgb.keyboardRows.indexOf(modelData.row) * Style.space(14)
+                width: Math.max(1, keyboardReference.unit * (modelData.name === "Space" ? 5.75 : 1) - Style.space(2))
+                height: Style.space(11)
+                color: modelData.color
               }
             }
           }
@@ -521,56 +548,81 @@ Panel {
           width: parent.width
           spacing: Style.space(6)
 
-          PanelSectionHeader {
-            text: "DEVICES"
+          Button {
+            width: parent.width
+            leftAlign: true
+            horizontalPadding: 0
+            verticalPadding: Style.spacing.xs
+            text: (themeRgb.devicesExpanded ? "▾ " : "▸ ") + "DEVICES" + " (" + themeRgb.devices.length + ")"
             foreground: themeRgb.foreground
             fontFamily: themeRgb.fontFamily
-          }
-
-          Repeater {
-            model: themeRgb.devices
-            delegate: Item {
-              id: deviceRow
-              required property var modelData
-              width: devicesColumn.width
-              height: deviceName.implicitHeight + Style.space(4)
-
-              Text {
-                id: deviceName
-                anchors.left: deviceRow.left
-                anchors.right: deviceLeds.left
-                anchors.rightMargin: Style.space(8)
-                anchors.verticalCenter: deviceRow.verticalCenter
-                text: deviceRow.modelData.name
-                elide: Text.ElideRight
-                color: themeRgb.foreground
-                font.family: themeRgb.fontFamily
-                font.pixelSize: Style.font.body
-              }
-
-              Text {
-                id: deviceLeds
-                anchors.right: deviceRow.right
-                anchors.verticalCenter: deviceRow.verticalCenter
-                text: [deviceRow.modelData.type, deviceRow.modelData.leds > 0 ? deviceRow.modelData.leds + (deviceRow.modelData.leds === 1 ? " LED" : " LEDs") : ""]
-                  .filter(function(v) { return v !== "" }).join(" · ")
-                color: themeRgb.dim
-                font.family: themeRgb.fontFamily
-                font.pixelSize: Style.font.caption
+            fontSize: Style.font.caption
+            hasCursor: themeRgb.cursorActive && themeRgb.cursorRow === "devices"
+            Accessible.role: Accessible.Button
+            Accessible.name: "Devices (" + themeRgb.devices.length + ")"
+            Accessible.description: themeRgb.devicesExpanded ? "Collapse devices" : "Expand devices"
+            onClicked: themeRgb.devicesExpanded = !themeRgb.devicesExpanded
+            onHovered: function(h) {
+              if (h) {
+                themeRgb.cursorActive = true
+                themeRgb.cursorRow = "devices"
+                themeRgb.cursorIndex = 0
+              } else if (themeRgb.cursorRow === "devices") {
+                themeRgb.cursorActive = false
               }
             }
           }
 
-          Text {
-            visible: themeRgb.devices.length === 0
+          Column {
             width: parent.width
-            wrapMode: Text.WordWrap
-            text: !themeRgb.openrgbPresent
-              ? "Install OpenRGB to light devices (the openrgb package)."
-              : (themeRgb.syncing ? "Looking for devices…" : "OpenRGB found no devices on the last sync.")
-            color: themeRgb.dim
-            font.family: themeRgb.fontFamily
-            font.pixelSize: Style.font.caption
+            visible: themeRgb.devicesExpanded
+            spacing: Style.space(6)
+
+            Repeater {
+              model: themeRgb.devices
+              delegate: Item {
+                id: deviceRow
+                required property var modelData
+                width: devicesColumn.width
+                height: deviceName.implicitHeight + Style.space(4)
+
+                Text {
+                  id: deviceName
+                  anchors.left: deviceRow.left
+                  anchors.right: deviceLeds.left
+                  anchors.rightMargin: Style.space(8)
+                  anchors.verticalCenter: deviceRow.verticalCenter
+                  text: deviceRow.modelData.name
+                  elide: Text.ElideRight
+                  color: themeRgb.foreground
+                  font.family: themeRgb.fontFamily
+                  font.pixelSize: Style.font.body
+                }
+
+                Text {
+                  id: deviceLeds
+                  anchors.right: deviceRow.right
+                  anchors.verticalCenter: deviceRow.verticalCenter
+                  text: [deviceRow.modelData.type, deviceRow.modelData.leds > 0 ? deviceRow.modelData.leds + (deviceRow.modelData.leds === 1 ? " LED" : " LEDs") : ""]
+                    .filter(function(v) { return v !== "" }).join(" · ")
+                  color: themeRgb.dim
+                  font.family: themeRgb.fontFamily
+                  font.pixelSize: Style.font.caption
+                }
+              }
+            }
+
+            Text {
+              visible: themeRgb.devices.length === 0
+              width: parent.width
+              wrapMode: Text.WordWrap
+              text: !themeRgb.openrgbPresent
+                ? "Install OpenRGB to light devices (the openrgb package)."
+                : (themeRgb.syncing ? "Looking for devices…" : "OpenRGB found no devices on the last sync.")
+              color: themeRgb.dim
+              font.family: themeRgb.fontFamily
+              font.pixelSize: Style.font.caption
+            }
           }
         }
         }
