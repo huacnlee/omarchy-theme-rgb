@@ -2,7 +2,7 @@
 
 **Your theme, on every light.**
 
-<img src="preview.png" alt="The Theme RGB panel: colours, layout, brightness, the preview strip, and the devices found" width="380">
+<img width="595" height="838" alt="image" src="https://github.com/user-attachments/assets/0d95afdb-88c1-4f50-b203-5df6c7fd0f65" />
 
 <img width="5712" height="4284" alt="IMG_0398" src="https://github.com/user-attachments/assets/632697a8-ed76-48be-bd6e-ea6fd1dab970" />
 
