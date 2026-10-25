@@ -63,3 +63,26 @@ for (const [prev, count, want] of cases) {
   }
 }
 console.log("ok - every new device count triggers a sync")
+
+// Exercise the actual QML methods: panel changes must retain the case-lighting
+// preference when they save the rest of the settings.
+const qml = fs.readFileSync("Service.qml", "utf8")
+const loadMethod = qml.match(/  function loadConfig\(raw\) \{[\s\S]*?(?=\n  \/\/ The panel's setters)/)
+const saveMethod = qml.match(/  function save\(\) \{[\s\S]*?(?=\n  \/\/ The stops probe)/)
+if (!loadMethod || !saveMethod) throw new Error("QML config methods were not found")
+const configContext = {
+  root: { configPath: "/unused-theme-rgb-test.json" },
+  saveProcess: { running: false },
+  allDevices: false
+}
+vm.runInNewContext(loadMethod[0] + "\n" + saveMethod[0], configContext)
+configContext.loadConfig('{"mode":"palette","colors":8,"all_devices":true}')
+configContext.colors = 3
+configContext.save()
+const saved = JSON.parse(configContext.saveProcess.command.at(-1))
+if (saved.all_devices !== true || saved.colors !== 3) {
+  throw new Error("Panel save lost the all-devices preference")
+}
+configContext.loadConfig('{}')
+if (configContext.allDevices !== false) throw new Error("Old config should retain the original default")
+console.log("ok - panel saves retain the all-devices preference")

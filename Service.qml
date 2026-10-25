@@ -27,6 +27,7 @@ Item {
   property var custom: []
   property int brightness: 100
   property string layout: "flow"         // "flow" | "rows" | "columns" | "zones"
+  property bool allDevices: false
 
   // [{ name, hex }] the current theme defines, for the swatches.
   property var variables: []
@@ -73,6 +74,7 @@ Item {
     brightness = isFinite(b) && b >= 10 && b <= 100 ? Math.round(b) : 100
     var l = String(parsed.layout || "")
     layout = l === "rows" || l === "columns" || l === "zones" ? l : "flow"
+    allDevices = parsed.all_devices === true
   }
 
   // The panel's setters. Each writes the whole file, then re-syncs.
@@ -120,7 +122,8 @@ Item {
       colors: colors,
       custom: custom,
       brightness: brightness,
-      layout: layout
+      layout: layout,
+      all_devices: allDevices
     }
     saveProcess.command = ["bash", "-c",
       'mkdir -p "$(dirname "$1")" && printf "%s\\n" "$2" > "$1"', "_",
