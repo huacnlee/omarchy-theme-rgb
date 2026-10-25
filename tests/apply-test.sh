@@ -7,7 +7,9 @@ set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 APPLY="$ROOT/bin/omarchy-theme-rgb-apply"
 
-tmp=$(mktemp -d "$ROOT/.test-tmp.XXXXXX")
+test_tmp_root="${TMPDIR:-${XDG_CACHE_HOME:-$HOME/.cache}/omarchy-theme-rgb-tests}"
+mkdir -p "$test_tmp_root"
+tmp=$(mktemp -d "$test_tmp_root/theme-rgb-test.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 
 mock_bin="$tmp/bin"
@@ -442,6 +444,23 @@ if called 'openrgb -d 4 -m direct -c 0000ff,ff0000,00ff00,ff0000,0000ff,00ff00';
   pass "rows: the six key rows split top to bottom"
 else
   fail "rows: the six key rows split top to bottom" "$(cat "$calls")"
+fi
+
+# The EV63 has no function row, and Delete shares the shift row.
+printf 'yellow = "#ffff00"\norange = "#ff8000"\n' >>"$theme/colors.toml"
+set_config '{"mode":"custom","custom":["red","green","blue","yellow","orange"],"layout":"rows"}'
+OPENRGB_LIST_DEVICES="$(cat <<'DEVICE'
+4: IQUNIX EV63
+  Type: Keyboard
+  Modes: [Direct] Static
+  Zones: Keyboard
+  LEDs: 'Key: Escape' 'Key: Backspace' 'Key: ]' 'Key: \ (ANSI)' 'Key: '' 'Key: Enter' 'Key: Right Shift' 'Key: Up Arrow' 'Key: Delete' 'Key: Space'
+DEVICE
+)" run_apply
+if called 'openrgb -d 4 -m direct -c ff0000,ff0000,00ff00,00ff00,0000ff,0000ff,ffff00,ffff00,ffff00,ff8000'; then
+  pass "rows: EV63 row ends and navigation keys stay on their physical rows"
+else
+  fail "rows: EV63 row ends and navigation keys stay on their physical rows" "$(cat "$calls")"
 fi
 
 # --- columns: keys split left to right by their position ------------------
