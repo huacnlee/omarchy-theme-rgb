@@ -4,6 +4,8 @@
 
 <img src="preview.png" alt="The Theme RGB panel: colours, layout, brightness, the preview strip, and the devices found" width="380">
 
+<img width="5712" height="4284" alt="IMG_0398" src="https://github.com/user-attachments/assets/632697a8-ed76-48be-bd6e-ea6fd1dab970" />
+
 Lights every device [OpenRGB](https://openrgb.org) manages in the colours of
 the current [Omarchy](https://omarchy.org) theme. Switch themes and your
 keyboard, mouse, RAM, fans and strips follow; log in and they already match.
