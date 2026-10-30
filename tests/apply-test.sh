@@ -47,7 +47,7 @@ run_apply() {
   : >"$calls"
   HOME="$home" CALL_LOG="$calls" \
     OPENRGB_SIMPLE_LIST="${OPENRGB_SIMPLE_LIST:-0}" OPENRGB_LIST_DEVICES="${OPENRGB_LIST_DEVICES:-}" OPENRGB_LIST_FAIL="${OPENRGB_LIST_FAIL:-0}" OPENRGB_APPLY_FAIL="${OPENRGB_APPLY_FAIL:-0}" \
-    PATH="$mock_bin:$PATH" "$APPLY"
+    PATH="$mock_bin:$PATH" "$APPLY" "$@"
 }
 
 called() { grep -Fqx "$1" "$calls"; }
@@ -942,6 +942,109 @@ if called "openrgb --list-detailed" && grep -q 'Logitech G512 RGB' "$devices_fil
 else
   fail "OpenRGB 1.1 detailed listing" "$(cat "$calls")"
 fi
+
+# ==========================================================================
+# where each colour goes: the "assign" setting
+# ==========================================================================
+
+# The palette at this point; colour n is field n.
+set_config '{"mode":"palette","colors":3}'
+palette=$(stops)
+colour() { cut -d, -f"$1" <<<"$palette"; }
+
+# --- a device set to one colour number lights that colour; "off" is skipped -
+set_config '{"mode":"palette","colors":3,"assign":{"openrgb:Logitech G512 RGB":2,"openrgb:Razer Basilisk V3":"off"}}'
+OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
+if called "openrgb -d 0 -m static -c $(colour 2) -b 100" && ! grep -q -- '-d 1' "$calls"; then
+  pass "a device set to colour 2 lights colour 2, and one set to off is left alone"
+else
+  fail "a device set to colour 2 lights colour 2, and one set to off is left alone" "$(cat "$calls")"
+fi
+
+# --- a colour number past the palette wraps around -------------------------
+set_config '{"mode":"palette","colors":3,"assign":{"openrgb:Logitech G512 RGB":5,"openrgb:Razer Basilisk V3":"off"}}'
+OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
+if called "openrgb -d 0 -m static -c $(colour 2) -b 100"; then
+  pass "colour 5 of a three-colour palette is colour 2"
+else
+  fail "colour 5 of a three-colour palette is colour 2" "$(cat "$calls")"
+fi
+
+# --- every device off makes no apply call ----------------------------------
+set_config '{"mode":"palette","colors":3,"assign":{"openrgb:Logitech G512 RGB":"off","openrgb:Razer Basilisk V3":"off"}}'
+OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
+if (( $(call_count) == 1 )); then
+  pass "with every device left alone only the detection runs"
+else
+  fail "with every device left alone only the detection runs" "$(cat "$calls")"
+fi
+
+# --- plan lists what each device gets, Home Assistant lights included ------
+plan() { HOME="$home" PATH="$mock_bin:$PATH" "$APPLY" plan; }
+hass_lights="$home/.local/state/omarchy/theme-rgb/hass-lights"
+mkdir -p "$(dirname "$hass_lights")"
+set_config '{"mode":"palette","colors":3,"brightness":50,"assign":{"openrgb:Razer Basilisk V3":3,"hass:light.desk":2}}'
+OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
+dim=$(stops)
+printf 'light.desk\tDesk lamp\ton\nlight.shelf\tShelf\toff\n' >"$hass_lights"
+expected_plan=$(printf '%s\n' \
+  "openrgb"$'\t'"Logitech G512 RGB"$'\t'"Logitech G512 RGB"$'\t'"Keyboard"$'\t'"all"$'\t'"$dim" \
+  "openrgb"$'\t'"Razer Basilisk V3"$'\t'"Razer Basilisk V3"$'\t'"Mouse"$'\t'"3"$'\t'"$(cut -d, -f3 <<<"$dim")" \
+  "hass"$'\t'"light.desk"$'\t'"Desk lamp"$'\t'"on"$'\t'"2"$'\t'"$(colour 2)" \
+  $'hass\tlight.shelf\tShelf\toff\toff\t')
+if [[ $(plan) == "$expected_plan" ]]; then
+  pass "plan names every device's colours; Home Assistant gets them before brightness"
+else
+  fail "plan names every device's colours; Home Assistant gets them before brightness" "$(plan)"
+fi
+rm -f "$hass_lights"
+
+# --- Home Assistant lights with a colour are sent it, through the hass script
+cat >"$mock_bin/secret-tool" <<'SH'
+#!/bin/bash
+[[ $* == "lookup service theme-rgb-hass origin https://ha.test:443" ]] && printf 'test-token'
+exit 0
+SH
+cat >"$mock_bin/curl" <<'SH'
+#!/bin/bash
+config=$(cat)
+method=GET url=""
+while (( $# )); do
+  case $1 in -X) method=$2; shift ;; -m|-K|-w) shift ;; http*) url=$1 ;; esac
+  shift
+done
+data=$(sed -n 's/^data = "\(.*\)"$/\1/p' <<<"$config" | sed 's/\\"/"/g')
+printf 'curl %s %s %s\n' "$method" "$url" "$data" >>"$CALL_LOG"
+[[ $config == *"Bearer test-token"* ]] || { printf '\n401'; exit 0; }
+if [[ $method == GET ]]; then
+  printf '%s\n200' '[{"entity_id":"light.desk","state":"on","attributes":{"friendly_name":"Desk lamp","supported_color_modes":["hs","color_temp"]}},{"entity_id":"light.shelf","state":"off","attributes":{"friendly_name":"Shelf","supported_color_modes":["rgb"]}},{"entity_id":"light.hall","state":"on","attributes":{"supported_color_modes":["color_temp"]}}]'
+else
+  printf '[]\n200'
+fi
+SH
+chmod +x "$mock_bin/secret-tool" "$mock_bin/curl"
+rgb() { printf '%d,%d,%d' "0x${1:0:2}" "0x${1:2:2}" "0x${1:4:2}"; }
+set_config '{"mode":"palette","colors":3,"brightness":50,"home_assistant":{"url":"https://ha.test"},"assign":{"hass:light.desk":2,"hass:light.shelf":1}}'
+OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
+if called 'curl GET https://ha.test/api/states ' \
+  && called 'curl POST https://ha.test/api/services/light/turn_on {"entity_id":"light.desk","rgb_color":['"$(rgb "$(colour 2)")"']}' \
+  && ! grep -q 'light.shelf' <(grep '^curl POST' "$calls") \
+  && [[ $(cat "$hass_lights") == $'light.desk\tDesk lamp\ton\nlight.shelf\tShelf\toff' ]]; then
+  pass "a lit Home Assistant light gets its colour; one that is off stays off"
+else
+  fail "a lit Home Assistant light gets its colour; one that is off stays off" "$(cat "$calls"; cat "$hass_lights")"
+fi
+
+# --- "hass" colours only the Home Assistant lights -------------------------
+OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply hass
+if ! grep -q '^openrgb' "$calls" \
+  && called 'curl POST https://ha.test/api/services/light/turn_on {"entity_id":"light.desk","rgb_color":['"$(rgb "$(colour 2)")"']}'; then
+  pass "hass colours the Home Assistant lights without touching OpenRGB"
+else
+  fail "hass colours the Home Assistant lights without touching OpenRGB" "$(cat "$calls")"
+fi
+rm -f "$mock_bin/secret-tool" "$mock_bin/curl" "$hass_lights"
+set_config '{"mode":"single"}'
 
 echo
 if (( failures > 0 )); then

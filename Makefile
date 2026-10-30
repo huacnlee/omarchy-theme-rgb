@@ -7,7 +7,9 @@ PLUGIN_LINK := $(HOME)/.config/omarchy/plugins/$(PLUGIN_ID)
 test:
 	bash tests/apply-test.sh
 	bash tests/detector-test.sh
+	bash tests/hass-test.sh
 	node tests/startup-test.js
+	node tests/routing-test.js
 	bash tests/manifest-test.sh
 
 # Needs the Omarchy shell's Quickshell modules on the import path. Quickshell

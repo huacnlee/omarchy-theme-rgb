@@ -4,11 +4,14 @@ import Quickshell
 import qs.Commons
 import qs.Ui
 import "components"
+import "Routing.js" as Routing
 
 // Bar button plus the settings popout for Theme RGB. All state lives in
 // Service.qml (looked up through the shell); this file only shows it and
-// forwards the user's choices. The preview strip is painted from the same
-// `stops` the script sends to the hardware, so what you see is what lights.
+// forwards the user's choices. The numbered swatches, each device's colours
+// and the keyboard drawing come from the script that lights the hardware, so
+// what you see is what lights. Colours are numbered once, at the top; every
+// device then says which numbers it shows.
 Panel {
   id: themeRgb
   moduleName: "huacnlee.theme_rgb"
@@ -22,12 +25,15 @@ Panel {
 
   property var service: null
 
-  // One keyboard cursor: a section (mode, layout, brightness, devices) and an
-  // index within it. Pointer hover moves the same cursor.
+  // One keyboard cursor: a section (mode, brightness, layout) and an index
+  // within it. Pointer hover moves the same cursor. A device's dropdown takes
+  // the keys while it is open.
   property string cursorRow: "mode"
   property int cursorIndex: 0
   property bool cursorActive: false
-  property bool devicesExpanded: false
+  property int openDropdowns: 0
+  // The pattern under the pointer, described in place of the chosen one.
+  property string hoveredLayout: ""
 
   // The header's "more" menu, once its trailing control has loaded. While it
   // is open the list owns the keys.
@@ -36,10 +42,10 @@ Panel {
   readonly property string githubUrl: "https://github.com/huacnlee/omarchy-theme-rgb"
 
   readonly property var modes: [
-    { value: "single", label: "1", tooltip: "One theme colour on every device — the accent unless you pick another" },
+    { value: "single", label: "1", tooltip: "Only the accent" },
     { value: "3", label: "3", tooltip: "The accent and the two theme colours closest to the wallpaper" },
-    { value: "5", label: "5", tooltip: "Five of the theme's colours, the wallpaper's first" },
-    { value: "8", label: "8", tooltip: "Eight of the theme's colours, the wallpaper's first (the default)" }
+    { value: "5", label: "5", tooltip: "Five theme colours, the wallpaper's first" },
+    { value: "8", label: "8", tooltip: "Eight theme colours, the wallpaper's first" }
   ]
 
   readonly property string mode: service ? String(service.mode) : "palette"
@@ -63,7 +69,13 @@ Panel {
     return { left: lo === 100 ? 0 : lo, width: Math.max(1, hi-lo) }
   }
   readonly property int colors: service ? service.colors : 8
-  readonly property var devices: service && service.devices ? service.devices : []
+  // Every device and what it lights (Routing.parsePlan rows).
+  readonly property var plan: Routing.parsePlan(service ? service.planText : "")
+  readonly property var openrgbRows: plan.filter(function(r) { return r.source === "openrgb" })
+  readonly property var hassRows: plan.filter(function(r) { return r.source === "hass" })
+  readonly property string hassStatus: service ? service.hassStatus : ""
+  readonly property string hassMessage: Routing.hassMessage(hassStatus, hassRows.length)
+  readonly property bool patternInUse: Routing.patternInUse(plan, stops.length)
   readonly property var skippedDetectors: service && service.skippedDetectors ? service.skippedDetectors : []
   readonly property int brightness: service ? service.brightness : 100
   readonly property bool openrgbPresent: service ? service.openrgbPresent : false
@@ -82,15 +94,20 @@ Panel {
   }
   readonly property string layout: service ? String(service.layout) : "omarchy"
   readonly property var layouts: [
-    { value: "omarchy", label: "Omarchy", tooltip: "Super; modifiers; navigation; punctuation; Esc/Fn; Delete/Backspace; Enter/Space (default)" },
-    { value: "flow", label: "Flow", tooltip: "Bands along the LED order — top to bottom on most keyboards" },
-    { value: "rows", label: "Rows", tooltip: "Keyboard rows top to bottom, by where each key sits" },
-    { value: "columns", label: "Columns", tooltip: "Left to right across the keyboard, by where each key sits" },
-    { value: "zones", label: "Zones", tooltip: "Function keys, main block, modifiers, navigation, numpad, logo; other devices by their OpenRGB zones" },
-    { value: "gaming", label: "Gaming", tooltip: "Movement, skills, inventory and chat across FPS and action RPGs" },
-    { value: "outline", label: "Frame", tooltip: "Frame around the main typing block; navigation and numpad stay in the base" },
-    { value: "lazyvim", label: "LazyVim", tooltip: "HJKL navigation; Space leader and Escape" }
+    { value: "omarchy", label: "Omarchy", tooltip: "Colour 1 on the letters; Super, the modifiers, numbers and arrows, punctuation, Esc, Delete and Enter stand out in the other colours." },
+    { value: "flow", label: "Flow", tooltip: "Even bands in LED order, colour 1 first: top to bottom on most keyboards, end to end on a strip." },
+    { value: "rows", label: "Rows", tooltip: "One colour per keyboard row, colour 1 at the top." },
+    { value: "columns", label: "Columns", tooltip: "Bands from left to right across the keyboard, colour 1 on the left." },
+    { value: "zones", label: "Zones", tooltip: "Function keys (colour 1), letters, modifiers, navigation, numpad and logo in turn; a mouse or pad by its own zones." },
+    { value: "gaming", label: "Gaming", tooltip: "A dimmed colour 1 underneath; WASD, the arrows and skill keys 1–5 in vivid colours (fills up to eight)." },
+    { value: "outline", label: "Frame", tooltip: "Colour 1 inside; the outer rows and side keys of the letter block in the other colours." },
+    { value: "lazyvim", label: "LazyVim", tooltip: "Colour 1 everywhere; HJKL, and Space with Esc, stand out in the other colours." }
   ]
+  function layoutInfo(value) {
+    for (var i = 0; i < layouts.length; i++) if (layouts[i].value === value) return layouts[i]
+    return layouts[0]
+  }
+  readonly property var shownLayout: layoutInfo(hoveredLayout !== "" ? hoveredLayout : layout)
   function lookupService() {
     if (!bar || !bar.shell || typeof bar.shell.serviceFor !== "function") return
     var found = bar.shell.serviceFor(moduleName)
@@ -137,7 +154,7 @@ Panel {
     return 0
   }
 
-  readonly property var cursorRows: ["mode", "layout", "brightness", "devices"]
+  readonly property var cursorRows: ["mode", "brightness", "layout"]
 
   function rowLength(row) {
     if (row === "mode") return modes.length
@@ -179,7 +196,101 @@ Panel {
   function activateCursor() {
     if (cursorRow === "mode") chooseMode(modes[cursorIndex].value)
     else if (cursorRow === "layout") chooseLayout(layouts[cursorIndex].value)
-    else if (cursorRow === "devices") devicesExpanded = !devicesExpanded
+  }
+
+  // One device: the colours it shows, its name, and the choice of which.
+  component DeviceRow: Item {
+    id: deviceRow
+    required property var modelData
+    readonly property int count: themeRgb.stops.length
+    height: Math.max(deviceText.implicitHeight, choice.height) + Style.space(2)
+
+    Rectangle {
+      id: deviceSwatch
+      anchors.left: deviceRow.left
+      anchors.verticalCenter: deviceRow.verticalCenter
+      width: Style.space(36)
+      height: Style.space(16)
+      color: "transparent"
+      border.width: 1
+      border.color: Qt.rgba(themeRgb.foreground.r, themeRgb.foreground.g, themeRgb.foreground.b, 0.35)
+      Row {
+        id: deviceBands
+        anchors.fill: parent
+        anchors.margins: 1
+        Repeater {
+          model: deviceRow.modelData.colours
+          delegate: Rectangle {
+            required property int index
+            required property var modelData
+            readonly property int bands: Math.max(1, deviceRow.modelData.colours.length)
+            readonly property int band: Math.floor(deviceBands.width / bands)
+            width: index === bands - 1 ? deviceBands.width - band * (bands - 1) : band
+            height: deviceBands.height
+            color: modelData
+          }
+        }
+      }
+      Text {
+        anchors.centerIn: parent
+        visible: deviceRow.modelData.colours.length === 0
+        text: "–"
+        color: themeRgb.dim
+        font.family: themeRgb.fontFamily
+        font.pixelSize: Style.font.caption
+      }
+    }
+
+    Column {
+      id: deviceText
+      anchors.left: deviceSwatch.right
+      anchors.leftMargin: Style.space(10)
+      anchors.right: choice.left
+      anchors.rightMargin: Style.space(8)
+      anchors.verticalCenter: deviceRow.verticalCenter
+      Text {
+        width: parent.width
+        text: deviceRow.modelData.name
+        elide: Text.ElideRight
+        color: themeRgb.foreground
+        font.family: themeRgb.fontFamily
+        font.pixelSize: Style.font.body
+      }
+      Text {
+        width: parent.width
+        text: Routing.detailText(deviceRow.modelData)
+        elide: Text.ElideRight
+        color: themeRgb.dim
+        font.family: themeRgb.fontFamily
+        font.pixelSize: Style.font.caption
+      }
+    }
+
+    Dropdown {
+      id: choice
+      anchors.right: deviceRow.right
+      anchors.verticalCenter: deviceRow.verticalCenter
+      width: Style.space(150)
+      showLabel: false
+      options: Routing.choiceOptions(deviceRow.modelData.source, deviceRow.count, deviceRow.modelData.choice)
+      value: Routing.choiceValue(deviceRow.modelData, deviceRow.count)
+      foreground: themeRgb.foreground
+      fontFamily: themeRgb.fontFamily
+      onChanged: function(v) {
+        if (themeRgb.service) themeRgb.service.setAssign(Routing.assignKey(deviceRow.modelData), Routing.storedChoice(v))
+      }
+      // While the list is open it has the keys; closing hands them back.
+      property bool counted: false
+      onPopupOpenChanged: {
+        if (popupOpen && !counted) { counted = true; themeRgb.openDropdowns++ }
+        else if (!popupOpen && counted) {
+          counted = false
+          themeRgb.openDropdowns--
+          if (themeRgb.opened) Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+        }
+      }
+      Component.onDestruction: if (counted) themeRgb.openDropdowns--
+    }
   }
 
   // Bar icon --------------------------------------------------------------
@@ -217,9 +328,9 @@ Panel {
   onBarChanged: lookupService()
 
   onOpenedChanged: if (opened) {
-    devicesExpanded = false
+    hoveredLayout = ""
     lookupService()
-    if (service) { service.refreshVariables(); service.refreshStops() }
+    if (service) { service.refreshVariables(); service.refreshStops(); service.refreshHass() }
     cursorActive = false
     cursorRow = "mode"
     cursorIndex = modeIndex()
@@ -237,7 +348,7 @@ Panel {
     focusTarget: keyCatcher
     // Wide enough for the mode chips in one row at any font size; the
     // Row's laid-out width is what the chips actually take.
-    contentWidth: panel.fittedContentWidth(Math.max(Style.space(360), modeGroup.width))
+    contentWidth: panel.fittedContentWidth(Math.max(Style.space(440), modeGroup.width))
     contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(900))
 
     PanelKeyCatcher {
@@ -245,7 +356,7 @@ Panel {
       anchors.fill: parent
       // The open menu takes every key, Esc included, so Esc closes the menu
       // before it closes the panel and j/k walk the list, not the chips.
-      blocked: themeRgb.menuOpen
+      blocked: themeRgb.menuOpen || themeRgb.openDropdowns > 0
 
       onMoveRequested: function(dx, dy) {
         if (!themeRgb.cursorActive) { themeRgb.cursorActive = true; return }
@@ -364,84 +475,103 @@ Panel {
         Column {
           id: settings
           width: parent.width
-          spacing: Style.space(12)
+          spacing: Style.space(14)
           visible: themeRgb.openrgbPresent
 
-        // Mode ------------------------------------------------------------
+        // Theme colours: how many, and their numbers ------------------------
         Column {
           width: parent.width
           spacing: Style.space(8)
 
-          PanelSectionHeader {
-            text: "COLOURS"
-            foreground: themeRgb.foreground
-            fontFamily: themeRgb.fontFamily
-          }
+          Item {
+            width: parent.width
+            height: Math.max(coloursHeader.implicitHeight, modeGroup.height)
 
-          ButtonGroup {
-            id: modeGroup
-            options: themeRgb.modes
-            value: themeRgb.modeValue
-            foreground: themeRgb.foreground
-            fontFamily: themeRgb.fontFamily
-            focusable: false
-            cursorIndex: themeRgb.cursorActive && themeRgb.cursorRow === "mode" ? themeRgb.cursorIndex : -1
-            onChanged: function(v) { themeRgb.chooseMode(v) }
-            // The pointer drives the same cursor the keys move; leaving the chip
-            // it sits on clears it, so nothing stays lit behind the pointer.
-            onHovered: function(index, isHovered) {
-              if (!isHovered) {
-                if (themeRgb.cursorRow === "mode" && themeRgb.cursorIndex === index) themeRgb.cursorActive = false
-                return
+            PanelSectionHeader {
+              id: coloursHeader
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+              text: "THEME COLOURS"
+              foreground: themeRgb.foreground
+              fontFamily: themeRgb.fontFamily
+            }
+
+            Text {
+              anchors.right: modeGroup.left
+              anchors.rightMargin: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              text: "How many"
+              color: themeRgb.dim
+              font.family: themeRgb.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+
+            ButtonGroup {
+              id: modeGroup
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              options: themeRgb.modes
+              value: themeRgb.modeValue
+              foreground: themeRgb.foreground
+              fontFamily: themeRgb.fontFamily
+              focusable: false
+              cursorIndex: themeRgb.cursorActive && themeRgb.cursorRow === "mode" ? themeRgb.cursorIndex : -1
+              onChanged: function(v) { themeRgb.chooseMode(v) }
+              // The pointer drives the same cursor the keys move; leaving the chip
+              // it sits on clears it, so nothing stays lit behind the pointer.
+              onHovered: function(index, isHovered) {
+                if (!isHovered) {
+                  if (themeRgb.cursorRow === "mode" && themeRgb.cursorIndex === index) themeRgb.cursorActive = false
+                  return
+                }
+                themeRgb.cursorActive = true
+                themeRgb.cursorRow = "mode"
+                themeRgb.cursorIndex = index
               }
-              themeRgb.cursorActive = true
-              themeRgb.cursorRow = "mode"
-              themeRgb.cursorIndex = index
             }
           }
-        }
 
-        // Layout ----------------------------------------------------------
-        Column {
-          width: parent.width
-          spacing: Style.space(8)
-          opacity: themeRgb.stops.length > 1 ? 1.0 : 0.5
-
-          PanelSectionHeader {
-            text: "LAYOUT"
-            foreground: themeRgb.foreground
-            fontFamily: themeRgb.fontFamily
-          }
-
-          Flow {
-            id: layoutGroup
+          // The numbers every device below refers to.
+          Row {
+            id: swatchRow
             width: parent.width
-            spacing: Style.spacing.md
+            spacing: Style.space(4)
+            readonly property int count: Math.max(1, themeRgb.stops.length)
+            readonly property real cell: (width - spacing * (count - 1)) / count
             Repeater {
-              id: layoutButtons
-              model: themeRgb.layouts
-              delegate: Button {
-                required property var modelData
+              model: themeRgb.stops
+              delegate: Rectangle {
+                id: swatch
                 required property int index
-                text: modelData.label
-                tooltipText: modelData.tooltip
-                selected: themeRgb.layout === modelData.value
-                bordered: true
-                foreground: themeRgb.foreground
-                fontFamily: themeRgb.fontFamily
-                hasCursor: themeRgb.cursorActive && themeRgb.cursorRow === "layout" && themeRgb.cursorIndex === index
-                onClicked: themeRgb.chooseLayout(modelData.value)
-                onHovered: function(h) {
-                  if (h) {
-                    themeRgb.cursorActive = true
-                    themeRgb.cursorRow = "layout"
-                    themeRgb.cursorIndex = index
-                  } else if (themeRgb.cursorRow === "layout" && themeRgb.cursorIndex === index) {
-                    themeRgb.cursorActive = false
-                  }
+                required property var modelData
+                width: swatchRow.cell
+                height: Style.space(30)
+                color: modelData
+                border.width: 1
+                border.color: Qt.rgba(themeRgb.foreground.r, themeRgb.foreground.g, themeRgb.foreground.b, 0.25)
+                readonly property real luma: 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b
+                Text {
+                  anchors.centerIn: parent
+                  text: swatch.index + 1
+                  color: swatch.luma > 0.5 ? "#000000" : "#ffffff"
+                  font.family: themeRgb.fontFamily
+                  font.pixelSize: Style.font.body
+                  font.bold: true
                 }
               }
             }
+          }
+
+          Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            visible: themeRgb.mode !== "custom"
+            text: themeRgb.stops.length > 1
+              ? "Colour 1 is the theme's accent; the rest follow the wallpaper. Below, each device says which of these numbers it shows."
+              : "The theme's accent. Below, each device says whether it shows it."
+            color: themeRgb.dim
+            font.family: themeRgb.fontFamily
+            font.pixelSize: Style.font.caption
           }
         }
 
@@ -483,40 +613,206 @@ Panel {
             value: themeRgb.brightness
             onReleased: function(v) { if (themeRgb.service) themeRgb.service.setBrightness(v) }
           }
-        }
 
-        // Shared device palette comes before the keyboard-specific preview.
-        Rectangle {
-          width: parent.width
-          height: Style.space(18)
-          visible: themeRgb.stops.length > 0
-          color: "transparent"
-          border.width: 1
-          border.color: Qt.rgba(themeRgb.foreground.r, themeRgb.foreground.g, themeRgb.foreground.b, 0.40)
-          Row {
-            id: paletteRow
-            anchors.fill: parent
-            anchors.margins: 1
-            Repeater {
-              model: themeRgb.stops
-              delegate: Rectangle {
-                required property int index
-                required property var modelData
-                readonly property int count: Math.max(1, themeRgb.stops.length)
-                readonly property int band: Math.floor(paletteRow.width / count)
-                width: index === count - 1 ? paletteRow.width - band * (count - 1) : band
-                height: paletteRow.height
-                color: modelData
-              }
-            }
+          Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            visible: themeRgb.hassRows.length > 0
+            text: "Computer lighting only. Home Assistant lights keep the brightness they are at."
+            color: themeRgb.dim
+            font.family: themeRgb.fontFamily
+            font.pixelSize: Style.font.caption
           }
         }
 
+        PanelSeparator { width: parent.width; foreground: themeRgb.foreground }
+
+        // Where each colour goes ------------------------------------------
+        Column {
+          id: devicesColumn
+          width: parent.width
+          spacing: Style.space(8)
+
+          PanelSectionHeader {
+            text: "WHERE EACH COLOUR GOES"
+            foreground: themeRgb.foreground
+            fontFamily: themeRgb.fontFamily
+          }
+
+          Text {
+            text: "COMPUTER · OPENRGB"
+            color: themeRgb.dim
+            font.family: themeRgb.fontFamily
+            font.pixelSize: Style.font.caption
+          }
+
+          Repeater {
+            model: themeRgb.openrgbRows
+            delegate: DeviceRow { width: devicesColumn.width }
+          }
+
+          Text {
+            visible: themeRgb.openrgbRows.length === 0
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: themeRgb.syncing ? "Looking for devices…" : "OpenRGB found no devices on the last sync."
+            color: themeRgb.dim
+            font.family: themeRgb.fontFamily
+            font.pixelSize: Style.font.caption
+          }
+
+          // A skipped device is why something is not lit.
+          Repeater {
+            model: themeRgb.skippedDetectors
+            delegate: Item {
+              id: skippedRow
+              required property string modelData
+              width: devicesColumn.width
+              height: Math.max(skippedText.implicitHeight, retryButton.implicitHeight) + Style.space(4)
+
+              Text {
+                id: skippedText
+                anchors.left: skippedRow.left
+                anchors.right: retryButton.left
+                anchors.rightMargin: Style.space(8)
+                anchors.verticalCenter: skippedRow.verticalCenter
+                wrapMode: Text.WordWrap
+                text: skippedRow.modelData + " is not lit: it stopped answering while devices were being found, so it is skipped."
+                color: themeRgb.dim
+                font.family: themeRgb.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              Button {
+                id: retryButton
+                anchors.right: skippedRow.right
+                anchors.verticalCenter: skippedRow.verticalCenter
+                text: "Try again"
+                bordered: true
+                foreground: themeRgb.foreground
+                fontFamily: themeRgb.fontFamily
+                fontSize: Style.font.caption
+                enabled: !!themeRgb.service
+                Accessible.name: "Try " + skippedRow.modelData + " again"
+                onClicked: themeRgb.service.retryDetector(skippedRow.modelData)
+              }
+            }
+          }
+
+          Item { width: 1; height: Style.space(2) }
+
+          Text {
+            text: "HOME ASSISTANT"
+            color: themeRgb.dim
+            font.family: themeRgb.fontFamily
+            font.pixelSize: Style.font.caption
+          }
+
+          Text {
+            visible: themeRgb.hassMessage !== ""
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: themeRgb.hassMessage
+            color: themeRgb.dim
+            font.family: themeRgb.fontFamily
+            font.pixelSize: Style.font.caption
+          }
+
+          Repeater {
+            model: themeRgb.hassRows
+            delegate: DeviceRow { width: devicesColumn.width }
+          }
+
+          Text {
+            visible: themeRgb.hassRows.length > 0
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "A light shows one colour. Theme RGB never turns a light on: one that is off takes its colour within about 20 seconds of being turned on."
+            color: themeRgb.dim
+            font.family: themeRgb.fontFamily
+            font.pixelSize: Style.font.caption
+          }
+        }
+
+        PanelSeparator { width: parent.width; foreground: themeRgb.foreground }
+
+        // Keyboard pattern: how "All colours" is laid out -------------------
         Column {
           width: parent.width
-          spacing: Style.spacing.md
+          spacing: Style.space(8)
+          opacity: themeRgb.patternInUse ? 1.0 : 0.5
+
+          Item {
+            width: parent.width
+            height: patternHeader.implicitHeight
+
+            PanelSectionHeader {
+              id: patternHeader
+              anchors.left: parent.left
+              text: "PATTERN FOR ALL COLOURS"
+              foreground: themeRgb.foreground
+              fontFamily: themeRgb.fontFamily
+            }
+          }
+
           Text {
-            text: themeRgb.service && themeRgb.service.keyboardDetected ? "KEYBOARD · DETECTED KEYS" : "KEYBOARD REFERENCE · ANSI"
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: themeRgb.patternInUse
+              ? "How a device set to all colours lays them out."
+              : "No device is set to all colours, so the pattern is not used now."
+            color: themeRgb.dim
+            font.family: themeRgb.fontFamily
+            font.pixelSize: Style.font.caption
+          }
+
+          Flow {
+            id: layoutGroup
+            width: parent.width
+            spacing: Style.spacing.md
+            Repeater {
+              id: layoutButtons
+              model: themeRgb.layouts
+              delegate: Button {
+                required property var modelData
+                required property int index
+                text: modelData.label
+                selected: themeRgb.layout === modelData.value
+                bordered: true
+                foreground: themeRgb.foreground
+                fontFamily: themeRgb.fontFamily
+                hasCursor: themeRgb.cursorActive && themeRgb.cursorRow === "layout" && themeRgb.cursorIndex === index
+                onClicked: themeRgb.chooseLayout(modelData.value)
+                onHasCursorChanged: if (hasCursor) themeRgb.hoveredLayout = modelData.value
+                onHovered: function(h) {
+                  if (h) {
+                    themeRgb.cursorActive = true
+                    themeRgb.cursorRow = "layout"
+                    themeRgb.cursorIndex = index
+                    themeRgb.hoveredLayout = modelData.value
+                  } else {
+                    if (themeRgb.hoveredLayout === modelData.value) themeRgb.hoveredLayout = ""
+                    if (themeRgb.cursorRow === "layout" && themeRgb.cursorIndex === index) themeRgb.cursorActive = false
+                  }
+                }
+              }
+            }
+          }
+
+          // The pattern under the pointer, else the chosen one, in words.
+          Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: themeRgb.shownLayout.label + (themeRgb.shownLayout.value === themeRgb.layout ? " (chosen)" : "") + ": " + themeRgb.shownLayout.tooltip
+            color: themeRgb.foreground
+            font.family: themeRgb.fontFamily
+            font.pixelSize: Style.font.caption
+          }
+
+          Text {
+            text: themeRgb.service && themeRgb.service.keyboardDetected
+              ? "YOUR KEYBOARD, AS IT IS LIT"
+              : "A STANDARD KEYBOARD (YOURS WAS NOT FOUND)"
             textFormat: Text.PlainText
             color: themeRgb.dim
             font.family: themeRgb.fontFamily
@@ -536,130 +832,6 @@ Panel {
                 width: Math.max(1, keyboardReference.unit * (modelData.name === "Space" ? 5.75 : 1) - Style.space(2))
                 height: Style.space(11)
                 color: modelData.color
-              }
-            }
-          }
-        }
-
-        PanelSeparator { width: parent.width; foreground: themeRgb.foreground }
-
-        // Devices ---------------------------------------------------------
-        Column {
-          id: devicesColumn
-          width: parent.width
-          spacing: Style.space(6)
-
-          Button {
-            width: parent.width
-            leftAlign: true
-            horizontalPadding: 0
-            verticalPadding: Style.spacing.xs
-            text: (themeRgb.devicesExpanded ? "▾ " : "▸ ") + "DEVICES" + " (" + themeRgb.devices.length + ")"
-            foreground: themeRgb.foreground
-            fontFamily: themeRgb.fontFamily
-            fontSize: Style.font.caption
-            hasCursor: themeRgb.cursorActive && themeRgb.cursorRow === "devices"
-            Accessible.role: Accessible.Button
-            Accessible.name: "Devices (" + themeRgb.devices.length + ")"
-            Accessible.description: themeRgb.devicesExpanded ? "Collapse devices" : "Expand devices"
-            onClicked: themeRgb.devicesExpanded = !themeRgb.devicesExpanded
-            onHovered: function(h) {
-              if (h) {
-                themeRgb.cursorActive = true
-                themeRgb.cursorRow = "devices"
-                themeRgb.cursorIndex = 0
-              } else if (themeRgb.cursorRow === "devices") {
-                themeRgb.cursorActive = false
-              }
-            }
-          }
-
-          Column {
-            width: parent.width
-            visible: themeRgb.devicesExpanded
-            spacing: Style.space(6)
-
-            Repeater {
-              model: themeRgb.devices
-              delegate: Item {
-                id: deviceRow
-                required property var modelData
-                width: devicesColumn.width
-                height: deviceName.implicitHeight + Style.space(4)
-
-                Text {
-                  id: deviceName
-                  anchors.left: deviceRow.left
-                  anchors.right: deviceLeds.left
-                  anchors.rightMargin: Style.space(8)
-                  anchors.verticalCenter: deviceRow.verticalCenter
-                  text: deviceRow.modelData.name
-                  elide: Text.ElideRight
-                  color: themeRgb.foreground
-                  font.family: themeRgb.fontFamily
-                  font.pixelSize: Style.font.body
-                }
-
-                Text {
-                  id: deviceLeds
-                  anchors.right: deviceRow.right
-                  anchors.verticalCenter: deviceRow.verticalCenter
-                  text: [deviceRow.modelData.type, deviceRow.modelData.leds > 0 ? deviceRow.modelData.leds + (deviceRow.modelData.leds === 1 ? " LED" : " LEDs") : ""]
-                    .filter(function(v) { return v !== "" }).join(" · ")
-                  color: themeRgb.dim
-                  font.family: themeRgb.fontFamily
-                  font.pixelSize: Style.font.caption
-                }
-              }
-            }
-
-            Text {
-              visible: themeRgb.devices.length === 0
-              width: parent.width
-              wrapMode: Text.WordWrap
-              text: !themeRgb.openrgbPresent
-                ? "Install OpenRGB to light devices (the openrgb package)."
-                : (themeRgb.syncing ? "Looking for devices…" : "OpenRGB found no devices on the last sync.")
-              color: themeRgb.dim
-              font.family: themeRgb.fontFamily
-              font.pixelSize: Style.font.caption
-            }
-          }
-
-          // Shown collapsed too: a skipped device is why something is not lit.
-          Repeater {
-            model: themeRgb.skippedDetectors
-            delegate: Item {
-              id: skippedRow
-              required property string modelData
-              width: devicesColumn.width
-              height: Math.max(skippedText.implicitHeight, retryButton.implicitHeight) + Style.space(4)
-
-              Text {
-                id: skippedText
-                anchors.left: skippedRow.left
-                anchors.right: retryButton.left
-                anchors.rightMargin: Style.space(8)
-                anchors.verticalCenter: skippedRow.verticalCenter
-                wrapMode: Text.WordWrap
-                text: skippedRow.modelData + " skipped: it stopped answering while OpenRGB looked for devices."
-                color: themeRgb.dim
-                font.family: themeRgb.fontFamily
-                font.pixelSize: Style.font.caption
-              }
-
-              Button {
-                id: retryButton
-                anchors.right: skippedRow.right
-                anchors.verticalCenter: skippedRow.verticalCenter
-                text: "Try again"
-                bordered: true
-                foreground: themeRgb.foreground
-                fontFamily: themeRgb.fontFamily
-                fontSize: Style.font.caption
-                enabled: !!themeRgb.service
-                Accessible.name: "Try " + skippedRow.modelData + " again"
-                onClicked: themeRgb.service.retryDetector(skippedRow.modelData)
               }
             }
           }

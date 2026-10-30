@@ -6,8 +6,14 @@
 #
 #   omarchy-theme-rgb-apply             apply to hardware
 #   omarchy-theme-rgb-apply stops       print the colours that would be lit:
-#                                       "desk a,b,c" and "ambient a,b,c"
+#                                       "desk a,b,c" and "ambient a,b,c",
+#                                       plus "raw a,b,c" (before brightness)
 #                                       (no OpenRGB involved)
+#   omarchy-theme-rgb-apply plan        print what every known device gets,
+#                                       one tab-separated line each:
+#                                       source key name detail choice colours
+#                                       (no OpenRGB or Home Assistant call)
+#   omarchy-theme-rgb-apply hass        colour only the Home Assistant lights
 #   omarchy-theme-rgb-apply variables   print "name hex" for every theme
 #                                       variable the user may pick
 
@@ -20,6 +26,11 @@ DEVICES_FILE="$HOME/.local/state/omarchy/theme-rgb/devices"
 KEYBOARD_FILE="$HOME/.local/state/omarchy/theme-rgb/keyboard-leds"
 # What openrgb said on the last apply, for a look when a sync went wrong.
 LOG_FILE="$HOME/.local/state/omarchy/theme-rgb/last-apply.log"
+# Home Assistant: the colour lights it reported last, and what the last apply
+# told it.
+HASS_LIGHTS_FILE="$HOME/.local/state/omarchy/theme-rgb/hass-lights"
+HASS_LOG_FILE="$HOME/.local/state/omarchy/theme-rgb/last-hass.log"
+HASS_SCRIPT="${BASH_SOURCE[0]%/*}/omarchy-theme-rgb-hass"
 DEVICE_TYPE_ORDER="Keyboard Mouse Mousemat Headset HeadsetStand Gamepad Monitor Speaker Light LEDStrip Motherboard DRAM GPU Cooler Case Storage Accessory"
 OPENRGB_TIMEOUT=30
 
@@ -35,6 +46,11 @@ CUSTOM=""
 BRIGHTNESS=100
 LAYOUT=omarchy        # flow | rows | columns | zones | key-accent presets
 ALL_DEVICES=false  # Apply the selected palette to case lighting as well.
+# What each device lights, keyed "openrgb:<device name>" or
+# "hass:<light entity>": "all" (every colour, placed by the layout), a colour
+# number (1 is the first colour of the palette) or "off" (left as it is).
+# A device not listed gets device_choice's default.
+ASSIGN='{}'
 
 # With three, five or eight colours every device lights the theme's own
 # colours, ordered by how close each sits to the current wallpaper's
@@ -60,6 +76,8 @@ if [[ -f $CONFIG ]] && command -v jq >/dev/null 2>&1; then
   brightness=$(jq -r '.brightness // empty' "$CONFIG" 2>/dev/null)
   layout=$(jq -r '.layout // empty' "$CONFIG" 2>/dev/null)
   [[ $(jq -r '.all_devices == true' "$CONFIG" 2>/dev/null) == true ]] && ALL_DEVICES=true
+  assign=$(jq -c '.assign // {} | if type == "object" then . else {} end' "$CONFIG" 2>/dev/null)
+  [[ -n $assign ]] && ASSIGN=$assign
   [[ $mode == single || $mode == palette || $mode == custom ]] && MODE=$mode
   is_variable "$single" && SINGLE=$single
   [[ $colors == 3 || $colors == 5 || $colors == 8 ]] && COLORS=$colors
@@ -478,7 +496,7 @@ all_stops() {
     fi
     scaled=$(scale_color "$color")
     if [[ ${1:-} == tagged ]]; then
-      printf '%s %s\n' "$scaled" "$is_native"
+      printf '%s %s %s\n' "$scaled" "$is_native" "$color"
     else
       echo "$scaled"
     fi
@@ -486,31 +504,95 @@ all_stops() {
   done
 }
 
+# STOPS are what OpenRGB lights (through the brightness), RAW the same
+# colours before it (what a Home Assistant light gets: it keeps its own
+# brightness).
 load_stops() {
-  local hex original
-  STOPS=(); ORIGINS=()
-  while read -r hex original; do
-    STOPS+=("$hex"); ORIGINS+=("$original")
+  local hex original raw
+  STOPS=(); ORIGINS=(); RAW=()
+  while read -r hex original raw; do
+    STOPS+=("$hex"); ORIGINS+=("$original"); RAW+=("$raw")
   done < <(all_stops tagged)
 }
 
 # "desk a,b,c" and "ambient a": the desk palette and ambient accent,
-# or matching palettes when all_devices is enabled.
+# or matching palettes when all_devices is enabled. Then "raw".
 stops() {
   local list
-  list=$(all_stops | paste -sd,)
-  [[ -n $list ]] || return
+  load_stops
+  (( ${#STOPS[@]} > 0 )) || return
+  list=$(IFS=,; echo "${STOPS[*]}")
   echo "desk $list"
   if [[ $ALL_DEVICES == true ]]; then
     echo "ambient $list"
   else
     echo "ambient ${list%%,*}"
   fi
+  echo "raw $(IFS=,; echo "${RAW[*]}")"
+}
+
+# What one device lights: "all", a colour number, or "off". The default for a
+# device the user has not set: desk peripherals take every colour, ambient
+# lighting the first one (every colour with all_devices), and a Home
+# Assistant light is left alone until the user gives it a colour.
+device_choice() {
+  local source="$1" key="$2" type="${3:-}" value
+  value=$(jq -r --arg k "$source:$key" '.[$k] // empty | tostring' <<<"$ASSIGN" 2>/dev/null)
+  if [[ $value == off || ( $value == all && $source != hass ) || $value =~ ^[1-9][0-9]?$ ]]; then
+    echo "$value"
+  elif [[ $source == hass ]]; then
+    echo off
+  elif [[ $ALL_DEVICES == true || " $DESK_TYPES " == *" $type "* ]]; then
+    echo all
+  else
+    echo 1
+  fi
+}
+
+# The index into STOPS of colour number n; a number past the end of the
+# palette wraps around, so colour 5 of a 3-colour palette is colour 2.
+stop_index() {
+  echo $(( ($1 - 1) % ${#STOPS[@]} ))
+}
+
+# The colours a choice lights, comma-separated; "raw" gives them before
+# brightness.
+choice_colours() {
+  local choice="$1" kind="${2:-}" list
+  if [[ $kind == raw ]]; then list=("${RAW[@]}"); else list=("${STOPS[@]}"); fi
+  case $choice in
+    off) echo "" ;;
+    all) (IFS=,; echo "${list[*]}") ;;
+    *) echo "${list[$(stop_index "$choice")]}" ;;
+  esac
+}
+
+plan() {
+  local id name leds type entity state choice
+  local -A seen=()
+  load_stops
+  (( ${#STOPS[@]} > 0 )) || return
+  if [[ -f $DEVICES_FILE ]]; then
+    while IFS="|" read -r id name leds type; do
+      [[ -n $name && -z ${seen[$name]:-} ]] || continue
+      seen[$name]=1
+      choice=$(device_choice openrgb "$name" "$type")
+      printf 'openrgb\t%s\t%s\t%s\t%s\t%s\n' "$name" "$name" "$type" "$choice" "$(choice_colours "$choice")"
+    done <"$DEVICES_FILE"
+  fi
+  if [[ -f $HASS_LIGHTS_FILE ]]; then
+    while IFS=$'\t' read -r entity name state; do
+      [[ $entity == light.* ]] || continue
+      choice=$(device_choice hass "$entity")
+      printf 'hass\t%s\t%s\t%s\t%s\t%s\n' "$entity" "$name" "$state" "$choice" "$(choice_colours "$choice" raw)"
+    done <"$HASS_LIGHTS_FILE"
+  fi
 }
 
 case ${1:-} in
   stops) stops; exit 0 ;;
   variables) theme_variables; exit 0 ;;
+  plan) plan; exit 0 ;;
 esac
 
 # --- apply ----------------------------------------------------------------
@@ -849,10 +931,40 @@ if [[ ${1:-} == preview ]]; then
   exit 0
 fi
 
-command -v openrgb >/dev/null 2>&1 || exit 0
+# Nothing to light without OpenRGB, unless a Home Assistant light has a colour.
+if ! command -v openrgb >/dev/null 2>&1 && [[ $ASSIGN != *'"hass:'* ]]; then
+  exit 0
+fi
 
 load_stops
 (( ${#STOPS[@]} > 0 )) || exit 0
+
+# Home Assistant lights the user gave a colour, alongside OpenRGB: a slow or
+# unreachable Home Assistant never holds the keyboard up. The script waits
+# for it before exiting, so whoever runs the sync knows when all of it is done.
+apply_home_assistant() {
+  local entity choice pairs=""
+  [[ -x $HASS_SCRIPT ]] || return 0
+  while read -r entity; do
+    [[ $entity == light.* ]] || continue
+    choice=$(device_choice hass "$entity")
+    [[ $choice == off ]] && continue
+    pairs+="$entity $(choice_colours "$choice" raw)"$'\n'
+  done < <(jq -r 'keys[] | select(startswith("hass:")) | .[5:]' <<<"$ASSIGN" 2>/dev/null)
+  [[ -n $pairs ]] || return 0
+  "$HASS_SCRIPT" apply <<<"$pairs"
+}
+mkdir -p "$(dirname "$HASS_LOG_FILE")"
+# `omarchy-theme-rgb-apply hass` does only this part: the shell runs it when
+# a light with a colour has just been turned on.
+if [[ ${1:-} == hass ]]; then
+  apply_home_assistant >"$HASS_LOG_FILE" 2>&1 </dev/null
+  exit
+fi
+apply_home_assistant >"$HASS_LOG_FILE" 2>&1 </dev/null &
+trap 'wait' EXIT
+
+command -v openrgb >/dev/null 2>&1 || exit 0
 
 # Runs openrgb with its output kept in the log; the exit status is the
 # caller's to report (124 is the timeout).
@@ -893,9 +1005,13 @@ device_info | awk -F'|' -v order="$DEVICE_TYPE_ORDER" '
 declare -A DEVICE_ARGS DEVICE_MODE
 DEVICE_IDS=()
 args=()
+parsed=0
 while IFS="|" read -r id mode leds name type zones multi names; do
+  parsed=1
   local_args=()
-  if (( ${#STOPS[@]} > 1 )) && { [[ $ALL_DEVICES == true ]] || [[ " $DESK_TYPES " == *" $type "* ]]; }; then
+  choice=$(device_choice openrgb "$name" "$type")
+  [[ $choice == off ]] && continue
+  if [[ $choice == all ]] && (( ${#STOPS[@]} > 1 )); then
     # Several colours need the device in a per-LED mode: in static it keeps
     # one colour and quietly drops the rest, which is how a sync "fails".
     if [[ $LAYOUT == zones && $names != *"Key: "* ]] && (( zones > 1 )); then
@@ -909,7 +1025,9 @@ while IFS="|" read -r id mode leds name type zones multi names; do
     fi
     DEVICE_MODE[$id]=$multi
   else
-    local_args=(-d "$id" -m "${mode:-static}" -c "${STOPS[0]}" -b 100)
+    color=${STOPS[0]}
+    [[ $choice == all ]] || color=${STOPS[$(stop_index "$choice")]}
+    local_args=(-d "$id" -m "${mode:-static}" -c "$color" -b 100)
     DEVICE_MODE[$id]=${mode:-static}
   fi
   DEVICE_ARGS[$id]="${local_args[*]}"
@@ -917,7 +1035,9 @@ while IFS="|" read -r id mode leds name type zones multi names; do
   args+=("${local_args[@]}")
 done < <(device_info)
 
-if (( ${#args[@]} == 0 )); then
+# Nothing parsed (an OpenRGB too old to list details): every device alike.
+# Devices the user set to be left alone are not a reason to do this.
+if (( ${#args[@]} == 0 && ! parsed )); then
   if (( ${#STOPS[@]} > 1 )); then
     args=(-c "$(IFS=,; echo "${STOPS[*]}")")
   else
@@ -925,6 +1045,7 @@ if (( ${#args[@]} == 0 )); then
   fi
 fi
 
+(( ${#args[@]} > 0 )) || exit 0
 mkdir -p "$(dirname "$LOG_FILE")"
 openrgb_call "${args[@]}" || exit $?
 

@@ -41,11 +41,25 @@ Dependencies: the `openrgb` package (the panel offers to install it), plus
 
 Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
 
-- **Colours** — `1`, `3`, `5` or `8` (the default). *1* is the accent on
-  every device. *3*, *5* and *8* are the first that many of the theme's own
-  colours, in an order the script works out per theme (below). Missing colours
-  are derived from the theme using HSLA.
-- **Layout** — where several colours go. *Omarchy* is the default. *Flow* lays bands along each
+- **Theme colours** — *How many*: `1`, `3`, `5` or `8` (the default). *1* is
+  the accent alone. *3*, *5* and *8* are the first that many of the theme's
+  own colours, in an order the script works out per theme (below). Missing
+  colours are derived from the theme using HSLA. The colours are drawn as
+  numbered swatches; colour 1 is the accent. Every device below refers to
+  these numbers.
+- **Where each colour goes** — every device, from OpenRGB and from Home
+  Assistant, with the colours it shows and a dropdown that picks them: *All
+  N colours* (laid out by the pattern below), one *Colour n*, or *Left as it
+  is* / *Not changed*. Out of the box the desk (keyboard, mouse, mousemat,
+  headset, gamepad) shows all colours, the rest of the computer (RAM,
+  motherboard, case, strips, monitor) colour 1, and Home Assistant lights
+  nothing until you give one a colour. A number past the palette wraps
+  around: colour 5 of three is colour 2.
+  A device that stopped OpenRGB's detection is listed as skipped, with *Try
+  again* (see below).
+- **Pattern for all colours** — where several colours go on a device set to
+  all colours. The pattern under the pointer is described in words below the
+  buttons, then drawn on your keyboard. *Omarchy* is the default. *Flow* lays bands along each
   device's LEDs (top to bottom on most keyboards). On keyboards, *Rows* and
   *Columns* place the bands by where each key actually sits, and *Zones*
   colours the function keys, main block, modifiers, navigation cluster,
@@ -100,7 +114,8 @@ Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
   deliberate group are retained; exact vendor geometry and limited palettes
   constrain the achievable separation.
 - **Brightness** — 10–100 %. Scales the colour values themselves, so it
-  works the same in every OpenRGB mode.
+  works the same in every OpenRGB mode. Home Assistant lights keep their own
+  brightness: they are sent the colour only.
 - **Preview** — the shared device palette strip, followed by a keyboard
   schematic computed by the same placement function as the hardware.
   After discovery this shows only the first connected keyboard’s detected keys.
@@ -108,10 +123,6 @@ Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
   unknown/vendor-specific keys may not be drawn. Each keyboard is coloured
   independently from its own detected LEDs. Before discovery an ANSI reference
   is shown.
-- **Devices** — collapsed by default, with a device count. Click the heading
-  or activate it with the keyboard to show devices and LED counts.
-  A device that stopped OpenRGB's detection is listed under it as skipped,
-  with *Try again* (see below).
 
 **A device that never answers.** OpenRGB probes devices one after another
 and waits on each without a timeout, so one that does not answer (a
@@ -124,6 +135,26 @@ same switch as OpenRGB's *Supported Devices* page), the server is started
 again, and the rest of the devices light. *Try again* switches the detector
 back on and restarts the server; if the device still does not answer it is
 skipped again.
+
+**Home Assistant lights.** Every Home Assistant light that can show a
+colour (colour modes hs, xy, rgb, rgbw or rgbww) is listed. A light shows one
+colour, so it is given one number. Theme RGB never turns a light on: a light
+that is off is skipped, and coloured within about 20 seconds of being turned
+on (the shell asks Home Assistant which lights are on every 20 s while any
+light has a colour). It talks to Home Assistant's REST API
+(`GET /api/states`, `POST /api/services/light/turn_on` with `rgb_color`).
+The address is `home_assistant.url` in the settings file, else the one the
+[Home Assistant bar plugin](https://github.com/konradk/hass) is
+set up with. The long-lived access token comes from the keyring: Theme RGB's
+own entry,
+
+```bash
+secret-tool store --label="Theme RGB Home Assistant" \
+  service theme-rgb-hass origin https://ha.example.com:443
+```
+
+else the Home Assistant plugin's entry for the same address. What the last
+sync told Home Assistant is in `~/.local/state/omarchy/theme-rgb/last-hass.log`.
 
 **Menu** — the `󰇘` button in the header lists *Sync now* and *GitHub*.
 
@@ -172,8 +203,9 @@ brightness setting — no gamma, no mixing toward white.
 
 Colours sit in bands or key groups with hard edges between them,
 never blended. Keyboard: `←`/`→` move within a row (on the brightness row
-they step by 10), `↑`/`↓` between rows, `Enter` picks, `1`–`4` pick a colours
-chip, `r` syncs now, `m` opens the menu, `Esc` closes.
+they step by 10), `↑`/`↓` between rows, `Enter` picks, `1`–`4` pick how many
+colours, `r` syncs now, `m` opens the menu, `Esc` closes. The devices'
+dropdowns are for the pointer.
 
 Settings live in `~/.config/omarchy/theme-rgb.json`; the file is watched, so
 editing it by hand applies too:
@@ -183,9 +215,19 @@ editing it by hand applies too:
   "mode": "palette",
   "colors": 8,
   "brightness": 100,
-  "layout": "omarchy"
+  "layout": "omarchy",
+  "assign": {
+    "openrgb:HyperX Fury RGB": 2,
+    "openrgb:Razer Basilisk V3": "off",
+    "hass:light.desk_lamp": 1
+  },
+  "home_assistant": { "url": "https://ha.example.com" }
 }
 ```
+
+`assign` is what the panel's dropdowns write: per device (`openrgb:` and the
+name OpenRGB gives it, or `hass:` and a light's entity id) `"all"`, a colour
+number, or `"off"`. A device not listed gets the default above.
 
 `mode` is `single` or `palette`, `colors` 3, 5 or 8, `brightness` 10–100 and
 `layout` one of `flow`, `rows`, `columns`, `zones`, `gaming`,

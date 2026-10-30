@@ -1,0 +1,157 @@
+#!/bin/bash
+
+# Home Assistant lights for Theme RGB. A bulb or a strip in Home Assistant
+# shows one colour, so each light the user picks gets one numbered colour of
+# the palette (see "assign" in theme-rgb.json); the apply script decides which
+# and hands the pairs over here.
+#
+#   omarchy-theme-rgb-hass lights   list the colour lights: one
+#                                   "<entity>\t<name>\t<state>" line each
+#   omarchy-theme-rgb-hass apply    read "<entity> <rrggbb>" lines on stdin and
+#                                   colour each of those lights that is on
+#
+# A light that is off is left off: a theme switch, or a sync at login, never
+# turns a lamp on. Only the colour is sent, never a brightness, so a lamp
+# keeps the brightness the room has it at.
+#
+# Both commands refresh two files the panel reads: the light list
+# (hass-lights) and how the last attempt went (hass-status): ok,
+# no-address, no-token, unauthorized, unreachable or error.
+#
+# Where Home Assistant is: "home_assistant": { "url": ... } in theme-rgb.json,
+# else the address the Home Assistant shell plugin (hass) is set up with. The
+# token comes from the keyring: Theme RGB's own entry, stored with
+#   secret-tool store --label="Theme RGB Home Assistant" \
+#     service theme-rgb-hass origin https://ha.example.com:443
+# else the hass plugin's entry for the same address. It goes to curl on
+# stdin, never in argv, which every process of the user can read.
+
+set -uo pipefail
+
+CONFIG="$HOME/.config/omarchy/theme-rgb.json"
+HASS_PLUGIN_CONFIG="$HOME/.config/omarchy/hass/config.json"
+STATE_DIR="$HOME/.local/state/omarchy/theme-rgb"
+LIGHTS_FILE="$STATE_DIR/hass-lights"
+STATUS_FILE="$STATE_DIR/hass-status"
+TIMEOUT=8
+
+# The colour modes that take an rgb_color; color_temp, white, brightness and
+# onoff lights cannot show a theme colour.
+COLOUR_MODES='["hs","xy","rgb","rgbw","rgbww"]'
+
+mkdir -p "$STATE_DIR"
+
+status() {
+  printf '%s\n' "$1" >"$STATUS_FILE"
+}
+
+# "https://ha.local" -> "https://ha.local:443": the keyring entries are keyed
+# by an origin with the port spelled out.
+origin_of() {
+  local url="${1%/}" scheme rest host port
+  [[ $url =~ ^(https?)://([^/]+) ]] || return 1
+  scheme=${BASH_REMATCH[1]}
+  rest=${BASH_REMATCH[2]}
+  if [[ $rest =~ ^(.+):([0-9]+)$ ]]; then
+    host=${BASH_REMATCH[1]}
+    port=${BASH_REMATCH[2]}
+  else
+    host=$rest
+    [[ $scheme == https ]] && port=443 || port=80
+  fi
+  printf '%s://%s:%s\n' "$scheme" "$host" "$port"
+}
+
+URL=""
+[[ -f $CONFIG ]] && URL=$(jq -r '.home_assistant.url // empty | strings' "$CONFIG" 2>/dev/null)
+[[ -z $URL && -f $HASS_PLUGIN_CONFIG ]] && URL=$(jq -r '.baseUrl // empty | strings' "$HASS_PLUGIN_CONFIG" 2>/dev/null)
+URL=${URL%/}
+ORIGIN=$(origin_of "$URL" 2>/dev/null)
+if [[ -z $ORIGIN ]]; then
+  status no-address
+  : >"$LIGHTS_FILE"
+  exit 3
+fi
+
+TOKEN=""
+if command -v secret-tool >/dev/null 2>&1; then
+  TOKEN=$(secret-tool lookup service theme-rgb-hass origin "$ORIGIN" 2>/dev/null)
+  [[ -z $TOKEN ]] && TOKEN=$(secret-tool lookup service hass origin "$ORIGIN" 2>/dev/null)
+fi
+if [[ -z $TOKEN ]]; then
+  status no-token
+  exit 3
+fi
+
+# One request. Prints the body, then the HTTP code on a line of its own (000
+# when Home Assistant did not answer). The token and the body go through
+# curl's config on stdin.
+request() {
+  local method="$1" path="$2" body="${3:-}"
+  {
+    printf 'header = "Authorization: Bearer %s"\n' "$TOKEN"
+    printf 'header = "Content-Type: application/json"\n'
+    [[ -n $body ]] && printf 'data = "%s"\n' "${body//\"/\\\"}"
+  } | curl -s -m "$TIMEOUT" -X "$method" -K - -w '\n%{http_code}' "$URL$path"
+}
+
+# Every light's state, or a status and exit when Home Assistant cannot be read.
+STATES=""
+fetch_states() {
+  local reply code
+  reply=$(request GET /api/states)
+  code=${reply##*$'\n'}
+  STATES=${reply%$'\n'*}
+  case $code in
+    200) ;;
+    401|403) status unauthorized; exit 4 ;;
+    000) status unreachable; exit 4 ;;
+    *) status error; exit 4 ;;
+  esac
+  if ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"$STATES"; then
+    status error
+    exit 4
+  fi
+  jq -r --argjson modes "$COLOUR_MODES" '
+    [.[] | select(.entity_id | startswith("light."))
+         | select(((.attributes.supported_color_modes // []) - ((.attributes.supported_color_modes // []) - $modes)) | length > 0)]
+    | sort_by((.attributes.friendly_name // .entity_id) | ascii_downcase)
+    | .[] | [.entity_id, (.attributes.friendly_name // .entity_id), .state] | @tsv
+  ' <<<"$STATES" >"$LIGHTS_FILE.new" && mv "$LIGHTS_FILE.new" "$LIGHTS_FILE"
+  status ok
+}
+
+case ${1:-} in
+  lights)
+    fetch_states
+    cat "$LIGHTS_FILE"
+    ;;
+  apply)
+    fetch_states
+    failed=0
+    while read -r entity hex; do
+      [[ $entity =~ ^light\.[a-z0-9_]+$ && $hex =~ ^[0-9A-Fa-f]{6}$ ]] || continue
+      state=$(awk -F'\t' -v e="$entity" '$1 == e { print $3; exit }' "$LIGHTS_FILE")
+      if [[ $state != on ]]; then
+        echo "$entity: ${state:-not a colour light}, left alone"
+        continue
+      fi
+      body=$(printf '{"entity_id":"%s","rgb_color":[%d,%d,%d]}' "$entity" \
+        "0x${hex:0:2}" "0x${hex:2:2}" "0x${hex:4:2}")
+      reply=$(request POST /api/services/light/turn_on "$body")
+      code=${reply##*$'\n'}
+      if [[ $code == 200 ]]; then
+        echo "$entity: #$hex"
+      else
+        echo "$entity: Home Assistant answered $code"
+        failed=1
+      fi
+    done
+    (( failed )) && { status error; exit 5; }
+    exit 0
+    ;;
+  *)
+    echo "usage: omarchy-theme-rgb-hass lights|apply" >&2
+    exit 2
+    ;;
+esac
