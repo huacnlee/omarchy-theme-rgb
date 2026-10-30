@@ -19,6 +19,7 @@ Item {
   readonly property string configPath: home + "/.config/omarchy/theme-rgb.json"
   readonly property string devicesPath: home + "/.local/state/omarchy/theme-rgb/devices"
   readonly property string applyScript: localPath(Qt.resolvedUrl("bin/omarchy-theme-rgb-apply"))
+  readonly property string detectorScript: localPath(Qt.resolvedUrl("bin/omarchy-theme-rgb-detector"))
 
   // What theme-rgb.json says, with the script's defaults.
   property string mode: "palette"        // "single" | "palette" | "custom"
@@ -28,6 +29,9 @@ Item {
   property int brightness: 100
   property string layout: "omarchy"     // spatial layouts or named key-accent presets
   property bool allDevices: false
+  // OpenRGB detectors this plugin turned off because detection stalled in
+  // them, so the panel can name them and offer to try again.
+  property var skippedDetectors: []
 
   // [{ name, hex }] the current theme defines, for the swatches.
   property var variables: []
@@ -80,6 +84,9 @@ Item {
     if (l === "function" || l === "arrows") l = "zones"
     layout = ["flow", "rows", "columns", "zones", "gaming", "outline", "lazyvim", "omarchy"].indexOf(l) >= 0 ? l : "omarchy"
     allDevices = parsed.all_devices === true
+    skippedDetectors = Array.isArray(parsed.skipped_detectors)
+      ? parsed.skipped_detectors.filter(function(v) { return typeof v === "string" && v !== "" })
+      : []
   }
 
   // The panel's setters. Each writes the whole file, then re-syncs.
@@ -128,7 +135,8 @@ Item {
       custom: custom,
       brightness: brightness,
       layout: layout,
-      all_devices: allDevices
+      all_devices: allDevices,
+      skipped_detectors: skippedDetectors
     }
     saveProcess.command = ["bash", "-c",
       'mkdir -p "$(dirname "$1")" && printf "%s\\n" "$2" > "$1"', "_",
@@ -370,18 +378,116 @@ Item {
     serverProcess.running = true
   }
 
+  // A device that never answers OpenRGB's probe blocks detection for good:
+  // the detector waits on it without a timeout, and every device queued
+  // behind it is never found (a SteelSeries Rival 710 left only the RAM lit).
+  // The server runs with -vv so its log names each detector before running
+  // it. When detection goes quiet inside one, that detector is turned off in
+  // OpenRGB's settings and the server is started again without it. The panel
+  // lists what was skipped and can try it again.
+  readonly property int stallQuietMs: 10000
+  property var detection: ({ detector: "", lastLine: 0, completed: false })
+  property bool restartPending: false
+
+  function onServerLine(line) {
+    var event = Startup.detectionEvent(line)
+    if (!event || detection.completed) return
+    detection.lastLine = Date.now()
+    if (event.kind === "detector") detection.detector = event.name
+    else if (event.kind === "completed") {
+      detection.completed = true
+      stallWatch.stop()
+    }
+  }
+
+  function skipDetector(name) {
+    console.warn("huacnlee.theme_rgb: OpenRGB detection stalled in '" + name + "'; skipping it")
+    if (skippedDetectors.indexOf(name) < 0) {
+      skippedDetectors = skippedDetectors.concat([name])
+      save()
+    }
+    setDetector("disable", name)
+  }
+
+  function retryDetector(name) {
+    if (detectorProcess.running) return
+    skippedDetectors = skippedDetectors.filter(function(v) { return v !== name })
+    save()
+    setDetector("enable", name)
+  }
+
+  // The flag is written while the old server is still up, and the server is
+  // replaced once the write has landed, so the new one reads it at start.
+  function setDetector(action, name) {
+    if (detectorProcess.running) return
+    stallWatch.stop()
+    serverReady = false
+    detectorProcess.command = ["bash", root.detectorScript, action, name]
+    detectorProcess.running = true
+  }
+
+  // Applies wait for the new server (setDetector already holds them): a CLI
+  // call with no server to talk to would probe the hardware itself,
+  // alongside the starting server.
+  function restartServer() {
+    serverReady = false
+    if (serverProcess.running) {
+      restartPending = true
+      // SIGKILL: a server stuck in a blocking read does not act on SIGTERM.
+      serverProcess.signal(9)
+      return
+    }
+    serverStarts = 0
+    startServer()
+    readinessPolls = 0
+    lastDeviceCount = -1
+    readinessTimer.restart()
+    apply()
+  }
+
+  Process {
+    id: detectorProcess
+    onExited: function(exitCode) {
+      if (exitCode !== 0) console.warn("huacnlee.theme_rgb: could not change an OpenRGB detector setting")
+      root.restartServer()
+    }
+  }
+
+  Timer {
+    id: stallWatch
+    interval: 1000
+    repeat: true
+    onTriggered: {
+      var name = Startup.stalledDetector(root.detection, Date.now(), root.stallQuietMs)
+      if (name !== "") root.skipDetector(name)
+    }
+  }
+
   Process {
     id: serverProcess
-    command: ["openrgb", "--server", "--noautoconnect"]
+    command: ["openrgb", "--server", "--noautoconnect", "-vv"]
+    stdout: SplitParser {
+      onRead: function(line) { root.onServerLine(line) }
+    }
     stderr: StdioCollector {
       onStreamFinished: {
         var msg = String(text || "").trim()
         if (msg !== "") console.warn("huacnlee.theme_rgb: openrgb server: " + msg.split("\n").slice(-3).join(" | "))
       }
     }
-    onStarted: root.serverRunning = true
+    onStarted: {
+      root.serverRunning = true
+      root.detection = { detector: "", lastLine: Date.now(), completed: false }
+      stallWatch.restart()
+    }
     onExited: function(exitCode) {
       root.serverRunning = false
+      stallWatch.stop()
+      if (root.restartPending) {
+        root.restartPending = false
+        root.restartServer()
+        return
+      }
       console.warn("huacnlee.theme_rgb: openrgb server exited with " + exitCode + " (start " + root.serverStarts + ")")
       serverRetryTimer.restart()
     }

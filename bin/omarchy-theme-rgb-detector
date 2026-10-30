@@ -1,0 +1,41 @@
+#!/bin/bash
+
+# Turn one OpenRGB detector on or off in OpenRGB's own settings, the switch
+# OpenRGB's Settings > Supported Devices page flips. Service.qml turns off a
+# detector that stalled the server's detection (a device that never answers
+# blocks every device queued behind it), and turns it back on when the user
+# asks to try that device again.
+#
+#   omarchy-theme-rgb-detector disable "<detector name>"
+#   omarchy-theme-rgb-detector enable "<detector name>"
+#
+# Only that one flag changes. The file is written beside itself and renamed,
+# and one that does not parse is left alone.
+
+set -euo pipefail
+
+action=${1:-}
+name=${2:-}
+case $action in
+  enable) value=true ;;
+  disable) value=false ;;
+  *) echo "usage: omarchy-theme-rgb-detector enable|disable <detector name>" >&2; exit 2 ;;
+esac
+[[ -n $name ]] || { echo "omarchy-theme-rgb-detector: no detector name" >&2; exit 2; }
+
+config="${XDG_CONFIG_HOME:-$HOME/.config}/OpenRGB/OpenRGB.json"
+mkdir -p "$(dirname "$config")"
+current='{}'
+if [[ -s $config ]]; then
+  jq -e 'type == "object"' "$config" >/dev/null 2>&1 \
+    || { echo "omarchy-theme-rgb-detector: $config is not a JSON object" >&2; exit 1; }
+  current=$(cat "$config")
+fi
+
+tmp=$(mktemp "$config.XXXXXX")
+trap 'rm -f "$tmp"' EXIT
+jq --arg name "$name" --argjson value "$value" \
+  '.Detectors.detectors[$name] = $value' <<<"$current" >"$tmp"
+if [[ -e $config ]]; then chmod --reference="$config" "$tmp"; else chmod 644 "$tmp"; fi
+mv "$tmp" "$config"
+trap - EXIT

@@ -110,6 +110,20 @@ Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
   is shown.
 - **Devices** — collapsed by default, with a device count. Click the heading
   or activate it with the keyboard to show devices and LED counts.
+  A device that stopped OpenRGB's detection is listed under it as skipped,
+  with *Try again* (see below).
+
+**A device that never answers.** OpenRGB probes devices one after another
+and waits on each without a timeout, so one that does not answer (a
+SteelSeries Rival 710 does this now and then) stops detection there, and
+every device after it is never found. The plugin runs its OpenRGB server
+with `-vv`, whose log names each detector before it runs. When detection
+has gone quiet inside one for ten seconds, that detector is switched off in
+OpenRGB's own settings (`Detectors` in `~/.config/OpenRGB/OpenRGB.json`, the
+same switch as OpenRGB's *Supported Devices* page), the server is started
+again, and the rest of the devices light. *Try again* switches the detector
+back on and restarts the server; if the device still does not answer it is
+skipped again.
 
 **Menu** — the `󰇘` button in the header lists *Sync now* and *GitHub*.
 
