@@ -41,11 +41,25 @@ Dependencies: the `openrgb` package (the panel offers to install it), plus
 
 Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
 
-- **Colours** — `1`, `3`, `5` or `8` (the default). *1* is the accent on
-  every device. *3*, *5* and *8* are the first that many of the theme's own
-  colours, in an order the script works out per theme (below). Missing colours
-  are derived from the theme using HSLA.
-- **Layout** — where several colours go. *Omarchy* is the default. *Flow* lays bands along each
+- **Theme colours** — *How many*: `1`, `3`, `5` or `8` (the default). *1* is
+  the accent alone. *3*, *5* and *8* are the first that many of the theme's
+  own colours, in an order the script works out per theme (below). Missing
+  colours are derived from the theme using HSLA. The colours are drawn as
+  numbered swatches; colour 1 is the accent. Every device below refers to
+  these numbers.
+- **Where each colour goes** — every device, from OpenRGB and from Home
+  Assistant, with the colours it shows and a dropdown that picks them: *All
+  N colours* (laid out by the pattern below), one *Colour n*, or *Left as it
+  is* / *Not changed*. Out of the box the desk (keyboard, mouse, mousemat,
+  headset, gamepad) shows all colours, the rest of the computer (RAM,
+  motherboard, case, strips, monitor) colour 1, and Home Assistant lights
+  are not changed until you give one a colour. A number past the palette wraps
+  around: colour 5 of three is colour 2.
+  A device that stopped OpenRGB's detection is listed as skipped, with *Try
+  again* (see below).
+- **Pattern for all colours** — where several colours go on a device set to
+  all colours. The pattern under the pointer is described in words below the
+  buttons, then drawn on your keyboard. *Omarchy* is the default. *Flow* lays bands along each
   device's LEDs (top to bottom on most keyboards). On keyboards, *Rows* and
   *Columns* place the bands by where each key actually sits, and *Zones*
   colours the function keys, main block, modifiers, navigation cluster,
@@ -65,7 +79,9 @@ Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
 
   Gaming dims its base to 35% RGB and derives vivid accents with HSL
   saturation 80–95% and lightness 48–62%, preserving the theme hues. This
-  precedes the normal brightness slider and applies only to multicolour Gaming.
+  precedes the normal brightness slider and applies only to multicolour Gaming,
+  on devices set to all colours: the numbered colours, and every device set
+  to one of them, Home Assistant lights included, are not dimmed.
   Gaming expands multicolour palettes to at least 8 colours, retaining
   selected hues and filling missing slots from the theme/HSLA palette.
   This gives 1–5 five distinct colours, all different from Esc. The shared
@@ -100,7 +116,8 @@ Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
   deliberate group are retained; exact vendor geometry and limited palettes
   constrain the achievable separation.
 - **Brightness** — 10–100 %. Scales the colour values themselves, so it
-  works the same in every OpenRGB mode.
+  works the same in every OpenRGB mode. Home Assistant lights keep their own
+  brightness: they are sent the colour only.
 - **Preview** — the shared device palette strip, followed by a keyboard
   schematic computed by the same placement function as the hardware.
   After discovery this shows only the first connected keyboard’s detected keys.
@@ -108,8 +125,36 @@ Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
   unknown/vendor-specific keys may not be drawn. Each keyboard is coloured
   independently from its own detected LEDs. Before discovery an ANSI reference
   is shown.
-- **Devices** — collapsed by default, with a device count. Click the heading
-  or activate it with the keyboard to show devices and LED counts.
+
+**A device that never answers.** OpenRGB probes devices one after another
+and waits on each without a timeout, so one that does not answer (a
+SteelSeries Rival 710 does this now and then) stops detection there, and
+every device after it is never found. The plugin runs its OpenRGB server
+with `-vv`, whose log names each detector before it runs. When detection
+has gone quiet inside one for ten seconds, that detector is switched off in
+OpenRGB's own settings (`Detectors` in `~/.config/OpenRGB/OpenRGB.json`, the
+same switch as OpenRGB's *Supported Devices* page), the server is started
+again, and the rest of the devices light. *Try again* switches the detector
+back on and restarts the server; if the device still does not answer it is
+skipped again.
+
+**Home Assistant lights** are off until the *Home Assistant lights* switch
+in the panel is on; until then Home Assistant is never contacted. Switched
+on, the panel asks for your Home Assistant's address and a long-lived access
+token (your profile in Home Assistant, Security tab) and *Connect* lists
+every light that can show a colour (colour modes hs, xy, rgb, rgbw or
+rgbww). If the [Home Assistant bar plugin](https://github.com/konradk/hass)
+is set up, its address and token are used and there is nothing to type.
+The token is kept in the system keyring (`secret-tool`, from libsecret),
+never in the settings file.
+
+A light shows one colour, so it is given one number. Theme RGB never turns a
+light on: a light that is off is skipped, and coloured within about 20
+seconds of being turned on (the shell asks Home Assistant which lights are
+on every 20 s while any light has a colour). Only the colour is sent, never
+a brightness. It talks to Home Assistant's REST API (`GET /api/states`,
+`POST /api/services/light/turn_on` with `rgb_color`). What the last sync told
+Home Assistant is in `~/.local/state/omarchy/theme-rgb/last-hass.log`.
 
 **Menu** — the `󰇘` button in the header lists *Sync now* and *GitHub*.
 
@@ -158,8 +203,12 @@ brightness setting — no gamma, no mixing toward white.
 
 Colours sit in bands or key groups with hard edges between them,
 never blended. Keyboard: `←`/`→` move within a row (on the brightness row
-they step by 10), `↑`/`↓` between rows, `Enter` picks, `1`–`4` pick a colours
-chip, `r` syncs now, `m` opens the menu, `Esc` closes.
+they step by 10), `↑`/`↓` between rows, `Enter` picks, `1`–`4` pick how many
+colours, `r` syncs now, `m` opens the menu, `Esc` closes. Between brightness
+and the pattern, `↑`/`↓` walk the devices: `Enter` opens a device's list
+(`↑`/`↓` and `Enter` pick in it), presses *Try again*, or flips the Home
+Assistant switch. The Home Assistant address and token are typed with the
+pointer in the fields.
 
 Settings live in `~/.config/omarchy/theme-rgb.json`; the file is watched, so
 editing it by hand applies too:
@@ -169,8 +218,26 @@ editing it by hand applies too:
   "mode": "palette",
   "colors": 8,
   "brightness": 100,
-  "layout": "omarchy"
+  "layout": "omarchy",
+  "assign": {
+    "openrgb:HyperX Fury RGB": 2,
+    "openrgb:Razer Basilisk V3": "off",
+    "hass:light.desk_lamp": 1
+  },
+  "home_assistant": { "enabled": true, "url": "https://ha.example.com" }
 }
+```
+
+`assign` is what the panel's dropdowns write: per device (`openrgb:` and the
+name OpenRGB gives it, or `hass:` and a light's entity id) `"all"`, a colour
+number, or `"off"`. A device not listed gets the default above.
+`home_assistant.enabled` is the panel's switch; without `url` the Home
+Assistant bar plugin's address is used. The token Connect keeps can also be
+stored by hand:
+
+```bash
+secret-tool store --label="Theme RGB Home Assistant" \
+  service theme-rgb-hass origin https://ha.example.com:443
 ```
 
 `mode` is `single` or `palette`, `colors` 3, 5 or 8, `brightness` 10–100 and
@@ -209,6 +276,10 @@ It reads the same settings file. To use it as a theme hook instead:
 ```bash
 omarchy hook install theme-set bin/omarchy-theme-rgb-apply
 ```
+
+The hook colours Home Assistant lights too, through the plugin's copy of
+`omarchy-theme-rgb-hass` in `~/.config/omarchy/plugins/huacnlee.theme_rgb`;
+without the plugin installed there they are left alone.
 
 `omarchy-theme-rgb-apply stops` prints the colours it would light and
 `omarchy-theme-rgb-apply variables` the theme's variables, without touching

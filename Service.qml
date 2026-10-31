@@ -19,6 +19,9 @@ Item {
   readonly property string configPath: home + "/.config/omarchy/theme-rgb.json"
   readonly property string devicesPath: home + "/.local/state/omarchy/theme-rgb/devices"
   readonly property string applyScript: localPath(Qt.resolvedUrl("bin/omarchy-theme-rgb-apply"))
+  readonly property string detectorScript: localPath(Qt.resolvedUrl("bin/omarchy-theme-rgb-detector"))
+  readonly property string hassScript: localPath(Qt.resolvedUrl("bin/omarchy-theme-rgb-hass"))
+  readonly property string stateDir: home + "/.local/state/omarchy/theme-rgb"
 
   // What theme-rgb.json says, with the script's defaults.
   property string mode: "palette"        // "single" | "palette" | "custom"
@@ -28,6 +31,25 @@ Item {
   property int brightness: 100
   property string layout: "omarchy"     // spatial layouts or named key-accent presets
   property bool allDevices: false
+  // OpenRGB detectors this plugin turned off because detection stalled in
+  // them, so the panel can name them and offer to try again.
+  property var skippedDetectors: []
+  // What each device lights, keyed "openrgb:<name>" or "hass:<entity>":
+  // "all", a colour number, or "off". See device_choice in the script.
+  property var assign: ({})
+  // "home_assistant" as the file has it; keys this plugin does not know are
+  // written back untouched.
+  property var homeAssistant: null
+  // Home Assistant lights are left alone, and Home Assistant is never
+  // called, until the panel's switch is on. A file from before the switch
+  // that already gives a light a colour counts as on.
+  property bool hassEnabled: false
+  // The address in theme-rgb.json, else the one the Home Assistant bar
+  // plugin is set up with (the script falls back the same way).
+  property string hassUrl: ""
+  property string hassPluginUrl: ""
+  readonly property string hassAddress: hassUrl !== "" ? hassUrl : hassPluginUrl
+  readonly property bool hassBusy: hassProbe.running || hassConnect.running
 
   // [{ name, hex }] the current theme defines, for the swatches.
   property var variables: []
@@ -39,6 +61,15 @@ Item {
   property var deskStops: []
   property var ambientStops: []
   readonly property var stops: deskStops
+  // The same colours before brightness: what Home Assistant lights get.
+  property var rawStops: []
+  // What every known device lights, from the script's `plan` (see Routing.js).
+  property string planText: ""
+  // How the last Home Assistant read or write went: ok, no-address,
+  // no-keyring, no-token, unauthorized, unreachable or error ("" before the
+  // first, and while Connect runs); bad-address when Connect was given
+  // something that is not an http(s) address.
+  property string hassStatus: ""
   // [{ id, name, leds, type }] found on the last apply, desk peripherals first.
   property var devices: []
 
@@ -80,6 +111,24 @@ Item {
     if (l === "function" || l === "arrows") l = "zones"
     layout = ["flow", "rows", "columns", "zones", "gaming", "outline", "lazyvim", "omarchy"].indexOf(l) >= 0 ? l : "omarchy"
     allDevices = parsed.all_devices === true
+    skippedDetectors = Array.isArray(parsed.skipped_detectors)
+      ? parsed.skipped_detectors.filter(function(v) { return typeof v === "string" && v !== "" })
+      : []
+    var a = {}
+    if (parsed.assign && typeof parsed.assign === "object" && !Array.isArray(parsed.assign)) {
+      for (var k in parsed.assign) {
+        var v = parsed.assign[k]
+        if (v === "all" || v === "off" || (typeof v === "number" && v >= 1 && v <= 99 && Math.floor(v) === v)) a[k] = v
+      }
+    }
+    assign = a
+    var ha = parsed.home_assistant && typeof parsed.home_assistant === "object" && !Array.isArray(parsed.home_assistant)
+      ? parsed.home_assistant : null
+    homeAssistant = ha
+    hassUrl = ha && typeof ha.url === "string" ? ha.url : ""
+    var anyLight = false
+    for (var key in a) if (key.indexOf("hass:") === 0 && a[key] !== "off") anyLight = true
+    hassEnabled = ha && typeof ha.enabled === "boolean" ? ha.enabled : anyLight
   }
 
   // The panel's setters. Each writes the whole file, then re-syncs.
@@ -97,6 +146,39 @@ Item {
     if (next.length === custom.length) next.push(name)
     custom = next
     save()
+  }
+
+  // One device's choice; the plan is redrawn once the file is written.
+  function setAssign(key, value) {
+    if (!key || !(value === "all" || value === "off" || (typeof value === "number" && value >= 1))) return
+    var next = {}
+    for (var k in assign) next[k] = assign[k]
+    next[key] = value
+    assign = next
+    save()
+  }
+
+  function setHassEnabled(on) {
+    hassEnabled = on === true
+    save()
+    if (hassEnabled) refreshHass()
+    else refreshPlan()
+  }
+
+  // The panel's Connect: keeps the address, hands the token (if one was
+  // typed) to the script on stdin for the keyring, and lists the lights.
+  property string hassToken: ""
+  function connectHass(url, token) {
+    var u = String(url || "").trim().replace(/\/+$/, "")
+    if (!/^https?:\/\/[^\/\s]+/.test(u)) { hassStatus = "bad-address"; return }
+    if (hassConnect.running) return
+    hassEnabled = true
+    hassUrl = u === hassPluginUrl ? "" : u
+    save()
+    hassToken = String(token || "").trim()
+    hassStatus = ""
+    hassConnect.command = ["bash", hassScript, "connect", u]
+    hassConnect.running = true
   }
 
   function setBrightness(value) {
@@ -128,8 +210,16 @@ Item {
       custom: custom,
       brightness: brightness,
       layout: layout,
-      all_devices: allDevices
+      all_devices: allDevices,
+      skipped_detectors: skippedDetectors,
+      assign: assign
     }
+    var ha = {}
+    if (homeAssistant) for (var k in homeAssistant) ha[k] = homeAssistant[k]
+    ha.enabled = hassEnabled
+    if (hassUrl !== "") ha.url = hassUrl
+    else delete ha.url
+    payload.home_assistant = ha
     saveProcess.command = ["bash", "-c",
       'mkdir -p "$(dirname "$1")" && printf "%s\\n" "$2" > "$1"', "_",
       root.configPath, JSON.stringify(payload, null, 2)]
@@ -148,6 +238,32 @@ Item {
     stopsProbe.running = true
     if (keyboardProbe.running) keyboardProbe.running = false
     keyboardProbe.running = true
+    refreshPlan()
+  }
+
+  // Many things ask for the plan at once (a save, the settings file
+  // changing, a device list, Home Assistant answering), so the asks are
+  // gathered for a moment and a run in flight is never killed: a killed run
+  // hands over half its rows and the device list collapses and grows back.
+  property bool planPending: false
+
+  function refreshPlan() {
+    planTimer.restart()
+  }
+
+  Timer {
+    id: planTimer
+    interval: 150
+    onTriggered: {
+      if (planProbe.running) root.planPending = true
+      else planProbe.running = true
+    }
+  }
+
+  // Asks Home Assistant for its lights again (the panel does on opening);
+  // the list lands in hass-lights, which redraws the plan.
+  function refreshHass() {
+    if (hassEnabled && !hassProbe.running && !hassConnect.running) hassProbe.running = true
   }
 
   function refreshVariables() {
@@ -244,9 +360,169 @@ Item {
         next.push({ id: parts[0], name: parts[1], leds: Number(parts[2]) || 0, type: parts[3] || "" })
       }
       root.devices = next
+      root.refreshPlan()
     }
     onLoadFailed: root.devices = []
     onFileChanged: reload()
+  }
+
+  // A light that is off is not coloured (a sync never turns a lamp on), so
+  // one that has just been turned on is coloured then. While any light has
+  // a colour, Home Assistant is asked every 20 s which lights are on.
+  property var hassOn: ({})
+
+  readonly property bool hassAssigned: {
+    if (!hassEnabled) return false
+    for (var k in assign) if (k.indexOf("hass:") === 0 && assign[k] !== "off") return true
+    return false
+  }
+
+  FileView {
+    id: hassLightsFile
+    path: root.stateDir + "/hass-lights"
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      var on = {}, turnedOn = []
+      var lines = String(text() || "").split("\n")
+      for (var i = 0; i < lines.length; i++) {
+        var f = lines[i].split("\t")
+        if (f.length < 3 || f[2] !== "on") continue
+        on[f[0]] = true
+        var choice = root.assign["hass:" + f[0]]
+        if (root.hassOn[f[0]] !== true && choice !== undefined && choice !== "off") turnedOn.push(f[0])
+      }
+      var first = root.hassSeen === false
+      root.hassSeen = true
+      root.hassOn = on
+      root.refreshPlan()
+      // The first reading only records what is on; the startup sync covers
+      // it. Only the lights just turned on are coloured: one set by hand
+      // since the last sync keeps its colour.
+      if (turnedOn.length > 0 && !first) root.applyHass(turnedOn)
+    }
+    onFileChanged: reload()
+  }
+  property bool hassSeen: false
+
+  // Every 20 s only the lights with a colour are asked whether they are on.
+  readonly property var hassAssignedLights: {
+    var list = []
+    if (!hassEnabled) return list
+    for (var k in assign) if (k.indexOf("hass:") === 0 && assign[k] !== "off") list.push(k.substring(5))
+    return list
+  }
+
+  Timer {
+    interval: 20000
+    repeat: true
+    running: root.hassAssigned
+    onTriggered: {
+      if (hassPoll.running || hassProbe.running || hassConnect.running) return
+      hassPoll.command = ["bash", root.hassScript, "poll"].concat(root.hassAssignedLights)
+      hassPoll.running = true
+    }
+  }
+
+  Process {
+    id: hassPoll
+    onExited: hassStatusFile.reload()
+  }
+
+  // Home Assistant is coloured after each sync, on its own: a slow or
+  // unreachable one never keeps the computer's sync, or the next one,
+  // waiting. `lights` empty means every light with a colour.
+  property var hassApplyQueue: null
+  function applyHass(lights) {
+    if (!hassAssigned) return
+    var next = lights && lights.length > 0 ? lights : []
+    if (hassApply.running) {
+      if (hassApplyQueue === null) hassApplyQueue = next
+      else if (hassApplyQueue.length === 0 || next.length === 0) hassApplyQueue = []
+      else hassApplyQueue = hassApplyQueue.concat(next)
+      return
+    }
+    hassApply.command = ["bash", root.applyScript, "hass"].concat(next)
+    hassApply.running = true
+  }
+
+  Process {
+    id: hassApply
+    onExited: {
+      hassStatusFile.reload()
+      if (root.hassApplyQueue === null) return
+      var next = root.hassApplyQueue
+      root.hassApplyQueue = null
+      root.applyHass(next)
+    }
+  }
+
+  FileView {
+    id: hassStatusFile
+    path: root.stateDir + "/hass-status"
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.hassStatus = String(text() || "").trim()
+    onLoadFailed: root.hassStatus = ""
+    onFileChanged: reload()
+  }
+
+  Process {
+    id: hassConnect
+    stdinEnabled: true
+    onStarted: {
+      write(root.hassToken + "\n")
+      root.hassToken = ""
+      stdinEnabled = false
+    }
+    onExited: {
+      stdinEnabled = true
+      hassStatusFile.reload()
+      root.refreshPlan()
+      root.applyHass([])
+    }
+  }
+
+  FileView {
+    path: root.home + "/.config/omarchy/hass/config.json"
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      var parsed = null
+      try { parsed = JSON.parse(String(text() || "")) } catch (e) { parsed = null }
+      var u = parsed && typeof parsed.baseUrl === "string" ? parsed.baseUrl : ""
+      root.hassPluginUrl = u.replace(/\/+$/, "")
+    }
+    onLoadFailed: root.hassPluginUrl = ""
+    onFileChanged: reload()
+  }
+
+  Process {
+    id: hassProbe
+    command: ["bash", root.hassScript, "lights"]
+    // The list and the status arrive through their files.
+    onExited: { hassStatusFile.reload(); root.refreshPlan() }
+  }
+
+  Process {
+    id: planProbe
+    command: ["bash", root.applyScript, "plan"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      // The plan ends with an "end" line; output without it is from a run
+      // that did not finish and is not shown.
+      onStreamFinished: {
+        var out = String(text || "")
+        var mark = out.lastIndexOf("end\n")
+        if (mark < 0 || mark !== out.length - 4 || (mark > 0 && out[mark - 1] !== "\n")) return
+        root.planText = out.slice(0, mark)
+      }
+    }
+    onExited: {
+      if (!root.planPending) return
+      root.planPending = false
+      running = true
+    }
   }
 
   // omarchy-theme-set writes theme.name only after the new theme directory
@@ -370,18 +646,147 @@ Item {
     serverProcess.running = true
   }
 
+  // A device that never answers OpenRGB's probe blocks detection for good:
+  // the detector waits on it without a timeout, and every device queued
+  // behind it is never found (a SteelSeries Rival 710 left only the RAM lit).
+  // The server runs with -vv so its log names each detector before running
+  // it. When detection goes quiet inside one, that detector is turned off in
+  // OpenRGB's settings and the server is started again without it. The panel
+  // lists what was skipped and can try it again.
+  //
+  // At most two detectors are skipped on its own per session: a stall the
+  // log cannot pin on a detector would otherwise blame one detector after
+  // another, each one switched off in OpenRGB's settings.
+  readonly property int maxAutoSkips: 2
+  property int autoSkips: 0
+  readonly property int stallQuietMs: 10000
+  property var detection: ({ detector: "", lastLine: 0, completed: false })
+  property bool restartPending: false
+  property string detectorAction: ""
+  property string detectorName: ""
+
+  function onServerLine(line) {
+    var event = Startup.detectionEvent(line)
+    if (!event || detection.completed) return
+    detection.lastLine = Date.now()
+    if (event.kind === "detector") detection.detector = event.name
+    else if (event.kind === "completed") {
+      detection.completed = true
+      stallWatch.stop()
+    }
+  }
+
+  function skipDetector(name) {
+    stallWatch.stop()
+    if (autoSkips >= maxAutoSkips) {
+      console.warn("huacnlee.theme_rgb: OpenRGB detection stalled in '" + name + "'; " + maxAutoSkips + " detectors were skipped already, leaving it")
+      return
+    }
+    autoSkips++
+    console.warn("huacnlee.theme_rgb: OpenRGB detection stalled in '" + name + "'; skipping it")
+    if (skippedDetectors.indexOf(name) < 0) {
+      skippedDetectors = skippedDetectors.concat([name])
+      save()
+    }
+    setDetector("disable", name)
+  }
+
+  function retryDetector(name) {
+    if (detectorProcess.running) return
+    // Asked for by hand, so it may be skipped again if it stalls again.
+    autoSkips = Math.max(0, autoSkips - 1)
+    skippedDetectors = skippedDetectors.filter(function(v) { return v !== name })
+    save()
+    setDetector("enable", name)
+  }
+
+  // The flag is written while the old server is still up, and the server is
+  // replaced once the write has landed, so the new one reads it at start.
+  function setDetector(action, name) {
+    if (detectorProcess.running) return
+    stallWatch.stop()
+    serverReady = false
+    detectorAction = action
+    detectorName = name
+    detectorProcess.command = ["bash", root.detectorScript, action, name]
+    detectorProcess.running = true
+  }
+
+  // Applies wait for the new server (setDetector already holds them): a CLI
+  // call with no server to talk to would probe the hardware itself,
+  // alongside the starting server.
+  function restartServer() {
+    serverReady = false
+    if (serverProcess.running) {
+      restartPending = true
+      // SIGKILL: a server stuck in a blocking read does not act on SIGTERM.
+      serverProcess.signal(9)
+      return
+    }
+    serverStarts = 0
+    startServer()
+    readinessPolls = 0
+    lastDeviceCount = -1
+    readinessTimer.restart()
+    apply()
+  }
+
+  Process {
+    id: detectorProcess
+    // When the flag could not be written (OpenRGB.json is not JSON, jq is
+    // missing), a restart would only stall the same way again: the list
+    // goes back to what OpenRGB has, and syncs carry on with the server as
+    // it is.
+    onExited: function(exitCode) {
+      if (exitCode === 0) {
+        root.restartServer()
+        return
+      }
+      console.warn("huacnlee.theme_rgb: could not " + root.detectorAction + " the OpenRGB detector '" + root.detectorName + "'")
+      var name = root.detectorName
+      var others = root.skippedDetectors.filter(function(v) { return v !== name })
+      root.skippedDetectors = root.detectorAction === "disable" ? others : others.concat([name])
+      root.save()
+      root.serverReady = true
+      root.apply()
+    }
+  }
+
+  Timer {
+    id: stallWatch
+    interval: 1000
+    repeat: true
+    onTriggered: {
+      var name = Startup.stalledDetector(root.detection, Date.now(), root.stallQuietMs)
+      if (name !== "") root.skipDetector(name)
+    }
+  }
+
   Process {
     id: serverProcess
-    command: ["openrgb", "--server", "--noautoconnect"]
+    command: ["openrgb", "--server", "--noautoconnect", "-vv"]
+    stdout: SplitParser {
+      onRead: function(line) { root.onServerLine(line) }
+    }
     stderr: StdioCollector {
       onStreamFinished: {
         var msg = String(text || "").trim()
         if (msg !== "") console.warn("huacnlee.theme_rgb: openrgb server: " + msg.split("\n").slice(-3).join(" | "))
       }
     }
-    onStarted: root.serverRunning = true
+    onStarted: {
+      root.serverRunning = true
+      root.detection = { detector: "", lastLine: Date.now(), completed: false }
+      stallWatch.restart()
+    }
     onExited: function(exitCode) {
       root.serverRunning = false
+      stallWatch.stop()
+      if (root.restartPending) {
+        root.restartPending = false
+        root.restartServer()
+        return
+      }
       console.warn("huacnlee.theme_rgb: openrgb server exited with " + exitCode + " (start " + root.serverStarts + ")")
       serverRetryTimer.restart()
     }
@@ -455,10 +860,10 @@ Item {
     command: ["bash", root.applyScript, "stops"]
     stdout: StdioCollector {
       waitForEnd: true
-      // "desk a,b,c" and "ambient a,b,c".
+      // "desk a,b,c", "ambient a,b,c" and "raw a,b,c".
       onStreamFinished: {
         var lines = String(text || "").trim().split("\n")
-        var found = { desk: [], ambient: [] }
+        var found = { desk: [], ambient: [], raw: [] }
         for (var i = 0; i < lines.length; i++) {
           var parts = lines[i].trim().split(/\s+/)
           if (parts.length !== 2 || !(parts[0] in found)) continue
@@ -467,6 +872,7 @@ Item {
         }
         root.deskStops = found.desk
         root.ambientStops = found.ambient
+        root.rawStops = found.raw
       }
     }
     onExited: function() {
@@ -492,9 +898,10 @@ Item {
 
   Process {
     id: applyProcess
-    command: ["bash", root.applyScript]
+    command: ["bash", root.applyScript, "openrgb"]
     onExited: function(exitCode) {
       root.syncing = false
+      root.applyHass([])
       root.lastSyncFailed = exitCode !== 0
       devicesFile.reload()
       if (root.applyPending) {
@@ -521,6 +928,7 @@ Item {
     openrgbProbe.running = true
     refreshVariables()
     refreshStops()
+    refreshHass()
     apply()
   }
 }

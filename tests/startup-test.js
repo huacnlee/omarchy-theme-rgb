@@ -86,3 +86,76 @@ if (saved.all_devices !== true || saved.colors !== 3) {
 configContext.loadConfig('{}')
 if (configContext.allDevices !== false) throw new Error("Old config should retain the original default")
 console.log("ok - panel saves retain the all-devices preference")
+
+// A detector skipped after a stall stays skipped across saves and restarts,
+// so the panel can still name it and offer to try it again.
+configContext.loadConfig('{"skipped_detectors":["SteelSeries Rival 710", 3, ""]}')
+if (JSON.stringify(configContext.skippedDetectors) !== '["SteelSeries Rival 710"]') {
+  throw new Error("Config load kept a malformed skipped detector")
+}
+configContext.brightness = 40
+configContext.saveProcess.running = false
+configContext.save()
+const savedSkips = JSON.parse(configContext.saveProcess.command.at(-1))
+if (JSON.stringify(savedSkips.skipped_detectors) !== '["SteelSeries Rival 710"]') {
+  throw new Error("Panel save lost the skipped detectors")
+}
+configContext.loadConfig('{}')
+if (configContext.skippedDetectors.length !== 0) throw new Error("Old config should skip nothing")
+console.log("ok - skipped detectors survive a save")
+
+// OpenRGB's server, run with -vv, names each detector before it runs it and
+// prints "Detection completed" at the end. A detector that never returns (a
+// SteelSeries Rival 710 that does not answer its firmware query blocks in
+// hid_read forever) leaves its own line as the last word, and every device
+// queued after it is never found. These lines are verbatim from OpenRGB 1.1.
+const lines = [
+  ["[4507      ][Debug  ][DetectionManager] SteelSeries Rival 710 is enabled", { kind: "detector", name: "SteelSeries Rival 710" }],
+  ["[5004      ][Debug  ][DetectionManager] HYTE Mousemat is enabled", { kind: "detector", name: "HYTE Mousemat" }],
+  ["[4552      ][Info   ][DetectionManager] Registering RGB controller SteelSeries QCK Prism Cloth XL", { kind: "progress" }],
+  ["[5011      ][Trace  ][DetectionManager] HYTE Mousemat detection end", { kind: "progress" }],
+  ["[5031      ][Info   ]|                Detection completed                 |", { kind: "completed" }],
+  ["[4497      ][Info   ]|               Detecting I2C PCI devices            |", { kind: "progress" }],
+  ["[170       ][Verbose][Crucial DRAM] Detection failed testing register A3.  Expected 03, got 00.", { kind: "progress" }],
+  // The SDK server and the resource manager log every client connection,
+  // and the panel polls the server once a second; that chatter is not
+  // detection progress and must not hide a stall.
+  ["[12086     ][Error  ][NetworkServer] recv_select failed receiving magic, closing listener", null],
+  ["[12055     ][Info   ][NetworkServer] Network server started", null],
+  ["[4507      ][Trace  ][ResourceManager] ResourceManager update signalled: 1", null],
+  ["    OpenRGB v1.1", null],
+  ["", null]
+]
+if (typeof context.detectionEvent !== "function") {
+  console.error("not ok - server log lines are read as detection progress")
+  process.exit(1)
+}
+for (const [line, want] of lines) {
+  const got = context.detectionEvent(line)
+  if (JSON.stringify(got) !== JSON.stringify(want)) {
+    console.error(`not ok - server log lines are read as detection progress (${JSON.stringify(line)} -> ${JSON.stringify(got)})`)
+    process.exit(1)
+  }
+}
+console.log("ok - server log lines are read as detection progress")
+
+// Detection stalls when a detector was named and nothing has been logged for
+// the quiet limit. The longest gap in a healthy run is about a second (DRAM
+// probing over I2C), so the limit leaves a wide margin.
+const stalls = [
+  [{ detector: "SteelSeries Rival 710", lastLine: 0, completed: false }, 9999, ""],
+  [{ detector: "SteelSeries Rival 710", lastLine: 0, completed: false }, 10000, "SteelSeries Rival 710"],
+  [{ detector: "SteelSeries Rival 710", lastLine: 0, completed: true }, 60000, ""],
+  [{ detector: "", lastLine: 0, completed: false }, 60000, ""]
+]
+if (typeof context.stalledDetector !== "function") {
+  console.error("not ok - a detector that stops logging is named as stalled")
+  process.exit(1)
+}
+for (const [state, now, want] of stalls) {
+  if (context.stalledDetector(state, now, 10000) !== want) {
+    console.error(`not ok - a detector that stops logging is named as stalled (${JSON.stringify(state)} at ${now})`)
+    process.exit(1)
+  }
+}
+console.log("ok - a detector that stops logging is named as stalled")

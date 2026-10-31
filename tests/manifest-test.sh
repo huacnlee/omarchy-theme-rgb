@@ -45,8 +45,9 @@ for fn in setMode setPalette setBrightness setLayout; do
 done
 # Colours are not picked by hand: the tiers are the whole choice.
 ! grep -q 'toggleCustom\|setRolePrimary\|setSingle' Panel.qml || fail "Panel.qml must not offer colour picking"
-grep -q '"DEVICES"' Panel.qml || fail "Panel.qml must list the devices"
-grep -q '"LAYOUT"' Panel.qml || fail "Panel.qml must offer the layout choice"
+grep -q '"WHERE EACH COLOUR GOES"' Panel.qml || fail "Panel.qml must list the devices and their colours"
+grep -q 'service.setAssign' Panel.qml || fail "Panel.qml must forward each device's colour to the service"
+grep -q '"PATTERN FOR ALL COLOURS"' Panel.qml || fail "Panel.qml must offer the layout choice"
 grep -q 'service.setLayout' Panel.qml || fail "Panel.qml must forward setLayout to the service"
 grep -q 'Your theme, on every light.' Panel.qml || fail "Panel.qml must carry the slogan"
 grep -q 'Install OpenRGB' Panel.qml || fail "Panel.qml must offer the install from its welcome page"
