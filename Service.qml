@@ -385,9 +385,17 @@ Item {
   // it. When detection goes quiet inside one, that detector is turned off in
   // OpenRGB's settings and the server is started again without it. The panel
   // lists what was skipped and can try it again.
+  //
+  // At most two detectors are skipped on its own per session: a stall the
+  // log cannot pin on a detector would otherwise blame one detector after
+  // another, each one switched off in OpenRGB's settings.
+  readonly property int maxAutoSkips: 2
+  property int autoSkips: 0
   readonly property int stallQuietMs: 10000
   property var detection: ({ detector: "", lastLine: 0, completed: false })
   property bool restartPending: false
+  property string detectorAction: ""
+  property string detectorName: ""
 
   function onServerLine(line) {
     var event = Startup.detectionEvent(line)
@@ -401,6 +409,12 @@ Item {
   }
 
   function skipDetector(name) {
+    stallWatch.stop()
+    if (autoSkips >= maxAutoSkips) {
+      console.warn("huacnlee.theme_rgb: OpenRGB detection stalled in '" + name + "'; " + maxAutoSkips + " detectors were skipped already, leaving it")
+      return
+    }
+    autoSkips++
     console.warn("huacnlee.theme_rgb: OpenRGB detection stalled in '" + name + "'; skipping it")
     if (skippedDetectors.indexOf(name) < 0) {
       skippedDetectors = skippedDetectors.concat([name])
@@ -411,6 +425,8 @@ Item {
 
   function retryDetector(name) {
     if (detectorProcess.running) return
+    // Asked for by hand, so it may be skipped again if it stalls again.
+    autoSkips = Math.max(0, autoSkips - 1)
     skippedDetectors = skippedDetectors.filter(function(v) { return v !== name })
     save()
     setDetector("enable", name)
@@ -422,6 +438,8 @@ Item {
     if (detectorProcess.running) return
     stallWatch.stop()
     serverReady = false
+    detectorAction = action
+    detectorName = name
     detectorProcess.command = ["bash", root.detectorScript, action, name]
     detectorProcess.running = true
   }
@@ -447,9 +465,22 @@ Item {
 
   Process {
     id: detectorProcess
+    // When the flag could not be written (OpenRGB.json is not JSON, jq is
+    // missing), a restart would only stall the same way again: the list
+    // goes back to what OpenRGB has, and syncs carry on with the server as
+    // it is.
     onExited: function(exitCode) {
-      if (exitCode !== 0) console.warn("huacnlee.theme_rgb: could not change an OpenRGB detector setting")
-      root.restartServer()
+      if (exitCode === 0) {
+        root.restartServer()
+        return
+      }
+      console.warn("huacnlee.theme_rgb: could not " + root.detectorAction + " the OpenRGB detector '" + root.detectorName + "'")
+      var name = root.detectorName
+      var others = root.skippedDetectors.filter(function(v) { return v !== name })
+      root.skippedDetectors = root.detectorAction === "disable" ? others : others.concat([name])
+      root.save()
+      root.serverReady = true
+      root.apply()
     }
   }
 

@@ -63,6 +63,18 @@ else
   fail "bad arguments"
 fi
 
+# --- a symlinked OpenRGB.json stays a symlink --------------------------------
+mkdir -p "$tmp/dotfiles"
+rm -f "$config"
+printf '{"Detectors":{"detectors":{"SteelSeries Apex Pro":true}}}\n' >"$tmp/dotfiles/OpenRGB.json"
+ln -s "$tmp/dotfiles/OpenRGB.json" "$config"
+run disable "SteelSeries Apex Pro"
+if [[ -L $config && $(jq -c '.Detectors.detectors["SteelSeries Apex Pro"]' "$tmp/dotfiles/OpenRGB.json") == false ]]; then
+  pass "a symlinked settings file is written through the link"
+else
+  fail "a symlinked settings file is written through the link" "$(ls -l "$config")"
+fi
+
 echo
 if (( failures > 0 )); then
   echo "$failures failing"

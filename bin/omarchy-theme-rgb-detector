@@ -24,6 +24,9 @@ esac
 [[ -n $name ]] || { echo "omarchy-theme-rgb-detector: no detector name" >&2; exit 2; }
 
 config="${XDG_CONFIG_HOME:-$HOME/.config}/OpenRGB/OpenRGB.json"
+# A settings file kept as a symlink (dotfiles) is written where it points,
+# so the link stays a link.
+config=$(realpath -m -- "$config")
 mkdir -p "$(dirname "$config")"
 current='{}'
 if [[ -s $config ]]; then
