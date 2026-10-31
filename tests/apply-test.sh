@@ -1043,6 +1043,22 @@ if ! grep -q '^openrgb' "$calls" \
 else
   fail "hass colours the Home Assistant lights without touching OpenRGB" "$(cat "$calls")"
 fi
+
+# --- with Home Assistant switched off, its lights are neither set nor listed
+set_config '{"mode":"palette","colors":3,"home_assistant":{"enabled":false,"url":"https://ha.test"},"assign":{"hass:light.desk":2}}'
+OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
+if ! grep -q '^curl' "$calls" && ! plan | grep -q '^hass'; then
+  pass "Home Assistant switched off: no call, no lights in the plan"
+else
+  fail "Home Assistant switched off: no call, no lights in the plan" "$(cat "$calls")"
+fi
+set_config '{"mode":"palette","colors":3,"home_assistant":{"url":"https://ha.test"}}'
+OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
+if ! grep -q '^curl' "$calls" && ! plan | grep -q '^hass'; then
+  pass "Home Assistant stays off until switched on, an address alone is not enough"
+else
+  fail "Home Assistant stays off until switched on, an address alone is not enough" "$(cat "$calls")"
+fi
 rm -f "$mock_bin/secret-tool" "$mock_bin/curl" "$hass_lights"
 set_config '{"mode":"single"}'
 

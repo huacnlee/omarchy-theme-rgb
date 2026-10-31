@@ -73,14 +73,28 @@ function patternInUse(rows, count) {
   return false
 }
 
-// What the Home Assistant section says instead of (or above) its lights.
+// What the Home Assistant section says above its form or its lights.
 function hassMessage(status, lightCount) {
-  if (status === "no-address")
-    return "Not set up. Theme RGB uses the address and token of the Home Assistant bar plugin, or \"home_assistant\" in theme-rgb.json."
-  if (status === "no-token") return "No access token in the keyring for this Home Assistant."
-  if (status === "unauthorized") return "Home Assistant refused the access token."
-  if (status === "unreachable") return "Home Assistant did not answer."
+  if (status === "no-address") return "Enter the address of your Home Assistant and an access token."
+  if (status === "bad-address") return "The address starts with http:// or https://, like http://homeassistant.local:8123."
+  if (status === "no-keyring")
+    return "The access token cannot be kept: secret-tool is missing. Install libsecret, then connect again."
+  if (status === "no-token") return "Enter an access token for this Home Assistant."
+  if (status === "unauthorized") return "Home Assistant refused the access token. Enter a new one."
+  if (status === "unreachable") return "Home Assistant did not answer at this address."
   if (status === "error") return "Home Assistant could not be read or set; see last-hass.log."
-  if (status === "ok" && lightCount === 0) return "No colour lights in Home Assistant."
+  if (status === "ok" && lightCount === 0) return "Connected, but Home Assistant has no lights that can show a colour."
   return ""
+}
+
+// The form shows until Home Assistant has answered; "" is a connect in
+// flight.
+function hassNeedsForm(status) {
+  return status !== "ok" && status !== ""
+}
+
+// "https://ha.example.com:8123/" -> "ha.example.com:8123"
+function hostOf(url) {
+  var m = /^https?:\/\/([^\/]+)/.exec(String(url || ""))
+  return m ? m[1] : String(url || "")
 }

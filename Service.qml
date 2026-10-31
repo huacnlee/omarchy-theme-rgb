@@ -37,8 +37,19 @@ Item {
   // What each device lights, keyed "openrgb:<name>" or "hass:<entity>":
   // "all", a colour number, or "off". See device_choice in the script.
   property var assign: ({})
-  // "home_assistant" as the file has it, written back untouched.
+  // "home_assistant" as the file has it; keys this plugin does not know are
+  // written back untouched.
   property var homeAssistant: null
+  // Home Assistant lights are left alone, and Home Assistant is never
+  // called, until the panel's switch is on. A file from before the switch
+  // that already gives a light a colour counts as on.
+  property bool hassEnabled: false
+  // The address in theme-rgb.json, else the one the Home Assistant bar
+  // plugin is set up with (the script falls back the same way).
+  property string hassUrl: ""
+  property string hassPluginUrl: ""
+  readonly property string hassAddress: hassUrl !== "" ? hassUrl : hassPluginUrl
+  readonly property bool hassBusy: hassProbe.running || hassConnect.running
 
   // [{ name, hex }] the current theme defines, for the swatches.
   property var variables: []
@@ -55,7 +66,9 @@ Item {
   // What every known device lights, from the script's `plan` (see Routing.js).
   property string planText: ""
   // How the last Home Assistant read or write went: ok, no-address,
-  // no-token, unauthorized, unreachable or error ("" before the first).
+  // no-keyring, no-token, unauthorized, unreachable or error ("" before the
+  // first, and while Connect runs); bad-address when Connect was given
+  // something that is not an http(s) address.
   property string hassStatus: ""
   // [{ id, name, leds, type }] found on the last apply, desk peripherals first.
   property var devices: []
@@ -109,7 +122,13 @@ Item {
       }
     }
     assign = a
-    homeAssistant = parsed.home_assistant && typeof parsed.home_assistant === "object" ? parsed.home_assistant : null
+    var ha = parsed.home_assistant && typeof parsed.home_assistant === "object" && !Array.isArray(parsed.home_assistant)
+      ? parsed.home_assistant : null
+    homeAssistant = ha
+    hassUrl = ha && typeof ha.url === "string" ? ha.url : ""
+    var anyLight = false
+    for (var key in a) if (key.indexOf("hass:") === 0 && a[key] !== "off") anyLight = true
+    hassEnabled = ha && typeof ha.enabled === "boolean" ? ha.enabled : anyLight
   }
 
   // The panel's setters. Each writes the whole file, then re-syncs.
@@ -137,6 +156,29 @@ Item {
     next[key] = value
     assign = next
     save()
+  }
+
+  function setHassEnabled(on) {
+    hassEnabled = on === true
+    save()
+    if (hassEnabled) refreshHass()
+    else refreshPlan()
+  }
+
+  // The panel's Connect: keeps the address, hands the token (if one was
+  // typed) to the script on stdin for the keyring, and lists the lights.
+  property string hassToken: ""
+  function connectHass(url, token) {
+    var u = String(url || "").trim().replace(/\/+$/, "")
+    if (!/^https?:\/\/[^\/\s]+/.test(u)) { hassStatus = "bad-address"; return }
+    if (hassConnect.running) return
+    hassEnabled = true
+    hassUrl = u === hassPluginUrl ? "" : u
+    save()
+    hassToken = String(token || "").trim()
+    hassStatus = ""
+    hassConnect.command = ["bash", hassScript, "connect", u]
+    hassConnect.running = true
   }
 
   function setBrightness(value) {
@@ -172,7 +214,12 @@ Item {
       skipped_detectors: skippedDetectors,
       assign: assign
     }
-    if (homeAssistant) payload.home_assistant = homeAssistant
+    var ha = {}
+    if (homeAssistant) for (var k in homeAssistant) ha[k] = homeAssistant[k]
+    ha.enabled = hassEnabled
+    if (hassUrl !== "") ha.url = hassUrl
+    else delete ha.url
+    payload.home_assistant = ha
     saveProcess.command = ["bash", "-c",
       'mkdir -p "$(dirname "$1")" && printf "%s\\n" "$2" > "$1"', "_",
       root.configPath, JSON.stringify(payload, null, 2)]
@@ -216,7 +263,7 @@ Item {
   // Asks Home Assistant for its lights again (the panel does on opening);
   // the list lands in hass-lights, which redraws the plan.
   function refreshHass() {
-    if (!hassProbe.running) hassProbe.running = true
+    if (hassEnabled && !hassProbe.running && !hassConnect.running) hassProbe.running = true
   }
 
   function refreshVariables() {
@@ -325,6 +372,7 @@ Item {
   property var hassOn: ({})
 
   readonly property bool hassAssigned: {
+    if (!hassEnabled) return false
     for (var k in assign) if (k.indexOf("hass:") === 0 && assign[k] !== "off") return true
     return false
   }
@@ -374,6 +422,36 @@ Item {
     printErrors: false
     onLoaded: root.hassStatus = String(text() || "").trim()
     onLoadFailed: root.hassStatus = ""
+    onFileChanged: reload()
+  }
+
+  Process {
+    id: hassConnect
+    stdinEnabled: true
+    onStarted: {
+      write(root.hassToken + "\n")
+      root.hassToken = ""
+      stdinEnabled = false
+    }
+    onExited: {
+      stdinEnabled = true
+      hassStatusFile.reload()
+      root.refreshPlan()
+      if (root.hassAssigned && !hassApply.running) hassApply.running = true
+    }
+  }
+
+  FileView {
+    path: root.home + "/.config/omarchy/hass/config.json"
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      var parsed = null
+      try { parsed = JSON.parse(String(text() || "")) } catch (e) { parsed = null }
+      var u = parsed && typeof parsed.baseUrl === "string" ? parsed.baseUrl : ""
+      root.hassPluginUrl = u.replace(/\/+$/, "")
+    }
+    onLoadFailed: root.hassPluginUrl = ""
     onFileChanged: reload()
   }
 

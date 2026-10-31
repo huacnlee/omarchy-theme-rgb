@@ -19,9 +19,14 @@ calls="$tmp/calls"
 status_file="$home/.local/state/omarchy/theme-rgb/hass-status"
 mkdir -p "$home/.config/omarchy" "$mock_bin"
 
-# The keyring answers for the origins listed in KEYRING ("service origin" per line).
+# The keyring answers for the origins listed in KEYRING ("service origin" per
+# line); a store is written to STORE_LOG as its arguments, then the secret.
 cat >"$mock_bin/secret-tool" <<'SH'
 #!/bin/bash
+if [[ $1 == store ]]; then
+  { echo "$*"; cat; } >"$STORE_LOG"
+  exit 0
+fi
 while read -r service origin; do
   [[ $* == "lookup service $service origin $origin" ]] && { printf 'token-%s' "$service"; exit 0; }
 done <<<"${KEYRING:-}"
@@ -43,7 +48,8 @@ chmod +x "$mock_bin/secret-tool" "$mock_bin/curl"
 failures=0
 pass() { echo "ok - $1"; }
 fail() { echo "not ok - $1"; [[ -n ${2:-} ]] && printf '  %s\n' "$2"; failures=$((failures + 1)); }
-run() { : >"$calls"; HOME="$home" CALL_LOG="$calls" PATH="$mock_bin:$PATH" bash "$HASS" "$@" >/dev/null 2>&1; }
+stored="$tmp/stored"
+run() { : >"$calls"; HOME="$home" CALL_LOG="$calls" STORE_LOG="$stored" PATH="$mock_bin:$PATH" bash "$HASS" "$@" >/dev/null 2>&1; }
 state() { cat "$status_file"; }
 
 # --- no address anywhere ----------------------------------------------------
@@ -89,6 +95,36 @@ if ! KEYRING="hass http://10.0.0.2:8123" CURL_ANSWER=000 run lights && [[ $(stat
   pass "no answer reads as unreachable"
 else
   fail "no answer reads as unreachable" "$(state)"
+fi
+
+# --- Connect: the address typed in the panel, and a new token kept ----------
+rm -f "$stored"
+if KEYRING="" run connect https://typed.example <<<"  new-token " \
+  && [[ $(cat "$calls") == "https://typed.example/api/states Bearer new-token" ]] \
+  && [[ $(cat "$stored") == $'store --label=Theme RGB Home Assistant service theme-rgb-hass origin https://typed.example:443\nnew-token' ]]; then
+  pass "Connect keeps the typed token for the typed address and lists its lights"
+else
+  fail "Connect keeps the typed token for the typed address and lists its lights" "$(cat "$calls") / $(cat "$stored" 2>/dev/null)"
+fi
+rm -f "$stored"
+if KEYRING="theme-rgb-hass https://typed.example:443" run connect https://typed.example </dev/null \
+  && [[ ! -e $stored && $(cat "$calls") == "https://typed.example/api/states Bearer token-theme-rgb-hass" ]]; then
+  pass "Connect with no token typed uses the one already kept"
+else
+  fail "Connect with no token typed uses the one already kept" "$(cat "$calls")"
+fi
+
+# --- no keyring tool -----------------------------------------------------------
+bare_bin="$tmp/bare"
+mkdir -p "$bare_bin"
+for tool in bash jq mkdir mv cat awk; do ln -s "$(command -v "$tool")" "$bare_bin/$tool"; done
+ln -s "$mock_bin/curl" "$bare_bin/curl"
+: >"$calls"
+if ! HOME="$home" CALL_LOG="$calls" PATH="$bare_bin" "$bare_bin/bash" "$HASS" lights >/dev/null 2>&1 \
+  && [[ $(state) == no-keyring && ! -s $calls ]]; then
+  pass "without secret-tool nothing is called and the panel is told"
+else
+  fail "without secret-tool nothing is called and the panel is told" "$(state)"
 fi
 
 echo

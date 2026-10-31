@@ -9,6 +9,11 @@
 #                                   "<entity>\t<name>\t<state>" line each
 #   omarchy-theme-rgb-hass apply    read "<entity> <rrggbb>" lines on stdin and
 #                                   colour each of those lights that is on
+#   omarchy-theme-rgb-hass connect <url>
+#                                   what the panel's Connect button runs: keep
+#                                   the token read on stdin (if any) in the
+#                                   keyring for that address, then list the
+#                                   lights there
 #
 # A light that is off is left off: a theme switch, or a sync at login, never
 # turns a lamp on. Only the colour is sent, never a brightness, so a lamp
@@ -16,7 +21,7 @@
 #
 # Both commands refresh two files the panel reads: the light list
 # (hass-lights) and how the last attempt went (hass-status): ok,
-# no-address, no-token, unauthorized, unreachable or error.
+# no-address, no-keyring, no-token, unauthorized, unreachable or error.
 #
 # Where Home Assistant is: "home_assistant": { "url": ... } in theme-rgb.json,
 # else the address the Home Assistant shell plugin (hass) is set up with. The
@@ -63,7 +68,8 @@ origin_of() {
 }
 
 URL=""
-[[ -f $CONFIG ]] && URL=$(jq -r '.home_assistant.url // empty | strings' "$CONFIG" 2>/dev/null)
+[[ ${1:-} == connect ]] && URL=${2:-}
+[[ -z $URL && -f $CONFIG ]] && URL=$(jq -r '.home_assistant.url // empty | strings' "$CONFIG" 2>/dev/null)
 [[ -z $URL && -f $HASS_PLUGIN_CONFIG ]] && URL=$(jq -r '.baseUrl // empty | strings' "$HASS_PLUGIN_CONFIG" 2>/dev/null)
 URL=${URL%/}
 ORIGIN=$(origin_of "$URL" 2>/dev/null)
@@ -73,11 +79,23 @@ if [[ -z $ORIGIN ]]; then
   exit 3
 fi
 
-TOKEN=""
-if command -v secret-tool >/dev/null 2>&1; then
-  TOKEN=$(secret-tool lookup service theme-rgb-hass origin "$ORIGIN" 2>/dev/null)
-  [[ -z $TOKEN ]] && TOKEN=$(secret-tool lookup service hass origin "$ORIGIN" 2>/dev/null)
+if ! command -v secret-tool >/dev/null 2>&1; then
+  status no-keyring
+  exit 3
 fi
+
+TOKEN=""
+if [[ ${1:-} == connect ]]; then
+  IFS= read -r TOKEN || true
+  TOKEN=${TOKEN//[$'\r\n\t ']/}
+  if [[ -n $TOKEN ]] && ! printf '%s' "$TOKEN" |
+      secret-tool store --label="Theme RGB Home Assistant" service theme-rgb-hass origin "$ORIGIN" 2>/dev/null; then
+    status no-keyring
+    exit 3
+  fi
+fi
+[[ -z $TOKEN ]] && TOKEN=$(secret-tool lookup service theme-rgb-hass origin "$ORIGIN" 2>/dev/null)
+[[ -z $TOKEN ]] && TOKEN=$(secret-tool lookup service hass origin "$ORIGIN" 2>/dev/null)
 if [[ -z $TOKEN ]]; then
   status no-token
   exit 3
@@ -122,7 +140,7 @@ fetch_states() {
 }
 
 case ${1:-} in
-  lights)
+  lights|connect)
     fetch_states
     cat "$LIGHTS_FILE"
     ;;
@@ -151,7 +169,7 @@ case ${1:-} in
     exit 0
     ;;
   *)
-    echo "usage: omarchy-theme-rgb-hass lights|apply" >&2
+    echo "usage: omarchy-theme-rgb-hass lights|apply|connect <url>" >&2
     exit 2
     ;;
 esac

@@ -52,6 +52,10 @@ ALL_DEVICES=false  # Apply the selected palette to case lighting as well.
 # number (1 is the first colour of the palette) or "off" (left as it is).
 # A device not listed gets device_choice's default.
 ASSIGN='{}'
+# Home Assistant lights are coloured only once the panel's switch is on
+# ("home_assistant": { "enabled": true }). A file from before the switch
+# that already gives a light a colour counts as on.
+HASS_ENABLED=false
 
 # With three, five or eight colours every device lights the theme's own
 # colours, ordered by how close each sits to the current wallpaper's
@@ -79,6 +83,10 @@ if [[ -f $CONFIG ]] && command -v jq >/dev/null 2>&1; then
   [[ $(jq -r '.all_devices == true' "$CONFIG" 2>/dev/null) == true ]] && ALL_DEVICES=true
   assign=$(jq -c '.assign // {} | if type == "object" then . else {} end' "$CONFIG" 2>/dev/null)
   [[ -n $assign ]] && ASSIGN=$assign
+  [[ $(jq -r '
+    if (.home_assistant.enabled? | type) == "boolean" then .home_assistant.enabled
+    else [(.assign // {}) | objects | to_entries[] | select((.key | startswith("hass:")) and .value != "off")] | length > 0
+    end' "$CONFIG" 2>/dev/null) == true ]] && HASS_ENABLED=true
   [[ $mode == single || $mode == palette || $mode == custom ]] && MODE=$mode
   is_variable "$single" && SINGLE=$single
   [[ $colors == 3 || $colors == 5 || $colors == 8 ]] && COLORS=$colors
@@ -581,7 +589,7 @@ plan() {
       printf 'openrgb\t%s\t%s\t%s\t%s\t%s\n' "$name" "$name" "$type" "$choice" "$(choice_colours "$choice")"
     done <"$DEVICES_FILE"
   fi
-  if [[ -f $HASS_LIGHTS_FILE ]]; then
+  if [[ $HASS_ENABLED == true && -f $HASS_LIGHTS_FILE ]]; then
     while IFS=$'\t' read -r entity name state; do
       [[ $entity == light.* ]] || continue
       choice=$(device_choice hass "$entity")
@@ -932,8 +940,8 @@ if [[ ${1:-} == preview ]]; then
   exit 0
 fi
 
-# Nothing to light without OpenRGB, unless a Home Assistant light has a colour.
-if ! command -v openrgb >/dev/null 2>&1 && [[ $ASSIGN != *'"hass:'* ]]; then
+# Nothing to light without OpenRGB, unless Home Assistant lights are on.
+if ! command -v openrgb >/dev/null 2>&1 && [[ $HASS_ENABLED != true ]]; then
   exit 0
 fi
 
@@ -945,7 +953,7 @@ load_stops
 # for it before exiting, so whoever runs the sync knows when all of it is done.
 apply_home_assistant() {
   local entity choice pairs=""
-  [[ -x $HASS_SCRIPT ]] || return 0
+  [[ $HASS_ENABLED == true && -x $HASS_SCRIPT ]] || return 0
   while read -r entity; do
     [[ $entity == light.* ]] || continue
     choice=$(device_choice hass "$entity")

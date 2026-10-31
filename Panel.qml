@@ -75,6 +75,22 @@ Panel {
   readonly property var hassRows: plan.filter(function(r) { return r.source === "hass" })
   readonly property string hassStatus: service ? service.hassStatus : ""
   readonly property string hassMessage: Routing.hassMessage(hassStatus, hassRows.length)
+  readonly property bool hassEnabled: service ? service.hassEnabled : false
+  readonly property bool hassBusy: service ? service.hassBusy : false
+  // "Change" reopens the address and token form over a working connection.
+  property bool hassEditing: false
+  readonly property bool hassShowForm: hassEnabled && !hassBusy && (hassEditing || Routing.hassNeedsForm(hassStatus))
+  readonly property bool editingText: hassAddressField.activeFocus || hassTokenField.activeFocus
+  function connectHass() {
+    if (!service) return
+    service.connectHass(hassAddressField.text, hassTokenField.text)
+    hassTokenField.text = ""
+    closeHassForm()
+  }
+  function closeHassForm() {
+    hassEditing = false
+    if (opened) Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+  }
   readonly property bool patternInUse: Routing.patternInUse(plan, stops.length)
   readonly property var skippedDetectors: service && service.skippedDetectors ? service.skippedDetectors : []
   readonly property int brightness: service ? service.brightness : 100
@@ -329,6 +345,7 @@ Panel {
 
   onOpenedChanged: if (opened) {
     hoveredLayout = ""
+    hassEditing = false
     lookupService()
     if (service) { service.refreshVariables(); service.refreshStops(); service.refreshHass() }
     cursorActive = false
@@ -356,7 +373,7 @@ Panel {
       anchors.fill: parent
       // The open menu takes every key, Esc included, so Esc closes the menu
       // before it closes the panel and j/k walk the list, not the chips.
-      blocked: themeRgb.menuOpen || themeRgb.openDropdowns > 0
+      blocked: themeRgb.menuOpen || themeRgb.openDropdowns > 0 || themeRgb.editingText
 
       onMoveRequested: function(dx, dy) {
         if (!themeRgb.cursorActive) { themeRgb.cursorActive = true; return }
@@ -617,7 +634,7 @@ Panel {
           Text {
             width: parent.width
             wrapMode: Text.WordWrap
-            visible: themeRgb.hassRows.length > 0
+            visible: themeRgb.hassEnabled && !themeRgb.hassShowForm && themeRgb.hassRows.length > 0
             text: "Computer lighting only. Home Assistant lights keep the brightness they are at."
             color: themeRgb.dim
             font.family: themeRgb.fontFamily
@@ -701,15 +718,26 @@ Panel {
 
           Item { width: 1; height: Style.space(2) }
 
-          Text {
-            text: "HOME ASSISTANT"
-            color: themeRgb.dim
-            font.family: themeRgb.fontFamily
-            font.pixelSize: Style.font.caption
+          // Home Assistant: off until switched on; then an address and a
+          // token until it answers, then its lights.
+          Toggle {
+            width: parent.width
+            label: "Home Assistant lights"
+            description: themeRgb.hassEnabled
+              ? "Lamps and strips in Home Assistant take a theme colour too."
+              : "Give lamps and strips in Home Assistant a theme colour too."
+            checked: themeRgb.hassEnabled
+            foreground: themeRgb.foreground
+            fontFamily: themeRgb.fontFamily
+            enabled: !!themeRgb.service
+            onClicked: {
+              themeRgb.hassEditing = false
+              themeRgb.service.setHassEnabled(!themeRgb.hassEnabled)
+            }
           }
 
           Text {
-            visible: themeRgb.hassMessage !== ""
+            visible: themeRgb.hassEnabled && themeRgb.hassMessage !== ""
             width: parent.width
             wrapMode: Text.WordWrap
             text: themeRgb.hassMessage
@@ -718,13 +746,118 @@ Panel {
             font.pixelSize: Style.font.caption
           }
 
+          Text {
+            visible: themeRgb.hassEnabled && themeRgb.hassBusy && themeRgb.hassStatus === ""
+            text: "Connecting…"
+            color: themeRgb.dim
+            font.family: themeRgb.fontFamily
+            font.pixelSize: Style.font.caption
+          }
+
+          Column {
+            id: hassForm
+            visible: themeRgb.hassShowForm
+            width: parent.width
+            spacing: Style.space(6)
+            onVisibleChanged: if (visible) hassAddressField.text = themeRgb.service ? themeRgb.service.hassAddress : ""
+            Component.onCompleted: if (visible) hassAddressField.text = themeRgb.service ? themeRgb.service.hassAddress : ""
+
+            TextField {
+              id: hassAddressField
+              width: parent.width
+              placeholderText: "http://homeassistant.local:8123"
+              foreground: themeRgb.foreground
+              font.family: themeRgb.fontFamily
+              inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoAutoUppercase
+              onAccepted: hassTokenField.forceActiveFocus()
+            }
+
+            TextField {
+              id: hassTokenField
+              width: parent.width
+              password: true
+              placeholderText: themeRgb.hassStatus === "no-token" || themeRgb.hassStatus === "unauthorized"
+                || themeRgb.hassStatus === "no-address" || themeRgb.hassStatus === "bad-address"
+                ? "Long-lived access token"
+                : "Long-lived access token (empty keeps the saved one)"
+              foreground: themeRgb.foreground
+              font.family: themeRgb.fontFamily
+              onAccepted: themeRgb.connectHass()
+            }
+
+            Text {
+              width: parent.width
+              wrapMode: Text.WordWrap
+              text: "Make a token in Home Assistant: your profile, Security tab, Long-lived access tokens. It is kept in the system keyring."
+              color: themeRgb.dim
+              font.family: themeRgb.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+
+            Row {
+              spacing: Style.space(8)
+              Button {
+                text: "Connect"
+                bordered: true
+                foreground: themeRgb.foreground
+                fontFamily: themeRgb.fontFamily
+                fontSize: Style.font.caption
+                enabled: !!themeRgb.service && !themeRgb.hassBusy
+                onClicked: themeRgb.connectHass()
+              }
+              Button {
+                visible: themeRgb.hassEditing
+                text: "Cancel"
+                bordered: true
+                foreground: themeRgb.foreground
+                fontFamily: themeRgb.fontFamily
+                fontSize: Style.font.caption
+                onClicked: themeRgb.closeHassForm()
+              }
+            }
+          }
+
+          // Connected: where, and a way to change it.
+          Item {
+            visible: themeRgb.hassEnabled && themeRgb.hassStatus === "ok" && !themeRgb.hassEditing
+            width: parent.width
+            height: Math.max(hassWhere.implicitHeight, hassChange.implicitHeight)
+
+            Text {
+              id: hassWhere
+              anchors.left: parent.left
+              anchors.right: hassChange.left
+              anchors.rightMargin: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              elide: Text.ElideRight
+              text: "Connected to " + Routing.hostOf(themeRgb.service ? themeRgb.service.hassAddress : "")
+              color: themeRgb.dim
+              font.family: themeRgb.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+
+            Button {
+              id: hassChange
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              text: "Change"
+              bordered: true
+              foreground: themeRgb.foreground
+              fontFamily: themeRgb.fontFamily
+              fontSize: Style.font.caption
+              onClicked: themeRgb.hassEditing = true
+            }
+          }
+
           Repeater {
-            model: themeRgb.hassRows
+            // The list is from the last answer; while the form is up it may
+            // be another Home Assistant's.
+            model: themeRgb.hassEnabled && !themeRgb.hassShowForm ? themeRgb.hassRows : []
             delegate: DeviceRow { width: devicesColumn.width }
           }
 
           Text {
-            visible: themeRgb.hassRows.length > 0
+            visible: themeRgb.hassEnabled && !themeRgb.hassShowForm && themeRgb.hassRows.length > 0
             width: parent.width
             wrapMode: Text.WordWrap
             text: "A light shows one colour. Theme RGB never turns a light on: one that is off takes its colour within about 20 seconds of being turned on."

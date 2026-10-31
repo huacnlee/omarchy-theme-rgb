@@ -53,7 +53,7 @@ Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
   is* / *Not changed*. Out of the box the desk (keyboard, mouse, mousemat,
   headset, gamepad) shows all colours, the rest of the computer (RAM,
   motherboard, case, strips, monitor) colour 1, and Home Assistant lights
-  nothing until you give one a colour. A number past the palette wraps
+  are not changed until you give one a colour. A number past the palette wraps
   around: colour 5 of three is colour 2.
   A device that stopped OpenRGB's detection is listed as skipped, with *Try
   again* (see below).
@@ -136,25 +136,23 @@ again, and the rest of the devices light. *Try again* switches the detector
 back on and restarts the server; if the device still does not answer it is
 skipped again.
 
-**Home Assistant lights.** Every Home Assistant light that can show a
-colour (colour modes hs, xy, rgb, rgbw or rgbww) is listed. A light shows one
-colour, so it is given one number. Theme RGB never turns a light on: a light
-that is off is skipped, and coloured within about 20 seconds of being turned
-on (the shell asks Home Assistant which lights are on every 20 s while any
-light has a colour). It talks to Home Assistant's REST API
-(`GET /api/states`, `POST /api/services/light/turn_on` with `rgb_color`).
-The address is `home_assistant.url` in the settings file, else the one the
-[Home Assistant bar plugin](https://github.com/konradk/hass) is
-set up with. The long-lived access token comes from the keyring: Theme RGB's
-own entry,
+**Home Assistant lights** are off until the *Home Assistant lights* switch
+in the panel is on; until then Home Assistant is never contacted. Switched
+on, the panel asks for your Home Assistant's address and a long-lived access
+token (your profile in Home Assistant, Security tab) and *Connect* lists
+every light that can show a colour (colour modes hs, xy, rgb, rgbw or
+rgbww). If the [Home Assistant bar plugin](https://github.com/konradk/hass)
+is set up, its address and token are used and there is nothing to type.
+The token is kept in the system keyring (`secret-tool`, from libsecret),
+never in the settings file.
 
-```bash
-secret-tool store --label="Theme RGB Home Assistant" \
-  service theme-rgb-hass origin https://ha.example.com:443
-```
-
-else the Home Assistant plugin's entry for the same address. What the last
-sync told Home Assistant is in `~/.local/state/omarchy/theme-rgb/last-hass.log`.
+A light shows one colour, so it is given one number. Theme RGB never turns a
+light on: a light that is off is skipped, and coloured within about 20
+seconds of being turned on (the shell asks Home Assistant which lights are
+on every 20 s while any light has a colour). Only the colour is sent, never
+a brightness. It talks to Home Assistant's REST API (`GET /api/states`,
+`POST /api/services/light/turn_on` with `rgb_color`). What the last sync told
+Home Assistant is in `~/.local/state/omarchy/theme-rgb/last-hass.log`.
 
 **Menu** — the `󰇘` button in the header lists *Sync now* and *GitHub*.
 
@@ -221,13 +219,21 @@ editing it by hand applies too:
     "openrgb:Razer Basilisk V3": "off",
     "hass:light.desk_lamp": 1
   },
-  "home_assistant": { "url": "https://ha.example.com" }
+  "home_assistant": { "enabled": true, "url": "https://ha.example.com" }
 }
 ```
 
 `assign` is what the panel's dropdowns write: per device (`openrgb:` and the
 name OpenRGB gives it, or `hass:` and a light's entity id) `"all"`, a colour
 number, or `"off"`. A device not listed gets the default above.
+`home_assistant.enabled` is the panel's switch; without `url` the Home
+Assistant bar plugin's address is used. The token Connect keeps can also be
+stored by hand:
+
+```bash
+secret-tool store --label="Theme RGB Home Assistant" \
+  service theme-rgb-hass origin https://ha.example.com:443
+```
 
 `mode` is `single` or `palette`, `colors` 3, 5 or 8, `brightness` 10–100 and
 `layout` one of `flow`, `rows`, `columns`, `zones`, `gaming`,

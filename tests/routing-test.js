@@ -64,6 +64,16 @@ check("Home Assistant problems are said, a working one with lights says nothing"
   assert.ok(R.hassMessage("no-token", 0).length > 0)
   assert.ok(R.hassMessage("ok", 0).length > 0)
   assert.strictEqual(R.hassMessage("ok", 2), "")
+  assert.ok(R.hassMessage("no-keyring", 0).indexOf("libsecret") >= 0)
+  assert.ok(R.hassMessage("bad-address", 0).length > 0)
+})
+
+check("the Home Assistant form shows until it answers", () => {
+  assert.strictEqual(R.hassNeedsForm("ok"), false)
+  assert.strictEqual(R.hassNeedsForm(""), false)
+  assert.strictEqual(R.hassNeedsForm("no-address"), true)
+  assert.strictEqual(R.hassNeedsForm("unauthorized"), true)
+  assert.strictEqual(R.hostOf("https://ha.example.com:8123/"), "ha.example.com:8123")
 })
 
 process.exit(failures ? 1 : 0)
