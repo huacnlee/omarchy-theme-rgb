@@ -64,6 +64,7 @@ Panel {
   }
   readonly property int colors: service ? service.colors : 8
   readonly property var devices: service && service.devices ? service.devices : []
+  readonly property var skippedDetectors: service && service.skippedDetectors ? service.skippedDetectors : []
   readonly property int brightness: service ? service.brightness : 100
   readonly property bool openrgbPresent: service ? service.openrgbPresent : false
   readonly property bool syncing: service ? service.syncing : false
@@ -622,6 +623,44 @@ Panel {
               color: themeRgb.dim
               font.family: themeRgb.fontFamily
               font.pixelSize: Style.font.caption
+            }
+          }
+
+          // Shown collapsed too: a skipped device is why something is not lit.
+          Repeater {
+            model: themeRgb.skippedDetectors
+            delegate: Item {
+              id: skippedRow
+              required property string modelData
+              width: devicesColumn.width
+              height: Math.max(skippedText.implicitHeight, retryButton.implicitHeight) + Style.space(4)
+
+              Text {
+                id: skippedText
+                anchors.left: skippedRow.left
+                anchors.right: retryButton.left
+                anchors.rightMargin: Style.space(8)
+                anchors.verticalCenter: skippedRow.verticalCenter
+                wrapMode: Text.WordWrap
+                text: skippedRow.modelData + " skipped: it stopped answering while OpenRGB looked for devices."
+                color: themeRgb.dim
+                font.family: themeRgb.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              Button {
+                id: retryButton
+                anchors.right: skippedRow.right
+                anchors.verticalCenter: skippedRow.verticalCenter
+                text: "Try again"
+                bordered: true
+                foreground: themeRgb.foreground
+                fontFamily: themeRgb.fontFamily
+                fontSize: Style.font.caption
+                enabled: !!themeRgb.service
+                Accessible.name: "Try " + skippedRow.modelData + " again"
+                onClicked: themeRgb.service.retryDetector(skippedRow.modelData)
+              }
             }
           }
         }
