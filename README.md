@@ -79,7 +79,9 @@ Click the palette glyph (or `omarchy-shell huacnlee.theme_rgb toggle`).
 
   Gaming dims its base to 35% RGB and derives vivid accents with HSL
   saturation 80–95% and lightness 48–62%, preserving the theme hues. This
-  precedes the normal brightness slider and applies only to multicolour Gaming.
+  precedes the normal brightness slider and applies only to multicolour Gaming,
+  on devices set to all colours: the numbered colours, and every device set
+  to one of them, Home Assistant lights included, are not dimmed.
   Gaming expands multicolour palettes to at least 8 colours, retaining
   selected hues and filling missing slots from the theme/HSLA palette.
   This gives 1–5 five distinct colours, all different from Esc. The shared
@@ -202,8 +204,11 @@ brightness setting — no gamma, no mixing toward white.
 Colours sit in bands or key groups with hard edges between them,
 never blended. Keyboard: `←`/`→` move within a row (on the brightness row
 they step by 10), `↑`/`↓` between rows, `Enter` picks, `1`–`4` pick how many
-colours, `r` syncs now, `m` opens the menu, `Esc` closes. The devices'
-dropdowns are for the pointer.
+colours, `r` syncs now, `m` opens the menu, `Esc` closes. Between brightness
+and the pattern, `↑`/`↓` walk the devices: `Enter` opens a device's list
+(`↑`/`↓` and `Enter` pick in it), presses *Try again*, or flips the Home
+Assistant switch. The Home Assistant address and token are typed with the
+pointer in the fields.
 
 Settings live in `~/.config/omarchy/theme-rgb.json`; the file is watched, so
 editing it by hand applies too:
@@ -271,6 +276,10 @@ It reads the same settings file. To use it as a theme hook instead:
 ```bash
 omarchy hook install theme-set bin/omarchy-theme-rgb-apply
 ```
+
+The hook colours Home Assistant lights too, through the plugin's copy of
+`omarchy-theme-rgb-hass` in `~/.config/omarchy/plugins/huacnlee.theme_rgb`;
+without the plugin installed there they are left alone.
 
 `omarchy-theme-rgb-apply stops` prints the colours it would light and
 `omarchy-theme-rgb-apply variables` the theme's variables, without touching

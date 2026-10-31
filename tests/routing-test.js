@@ -68,6 +68,17 @@ check("Home Assistant problems are said, a working one with lights says nothing"
   assert.ok(R.hassMessage("bad-address", 0).length > 0)
 })
 
+check("re-picking what a row shows stores nothing, so a stored all survives one colour", () => {
+  assert.strictEqual(R.samePick({ choice: "all" }, 1, "1"), true)
+  assert.strictEqual(R.samePick({ choice: "all" }, 3, "1"), false)
+  assert.strictEqual(R.samePick({ choice: "2" }, 3, "2"), true)
+})
+
+check("a lamp that is off and not set says only that it is off", () => {
+  assert.strictEqual(R.detailText({ source: "hass", detail: "off", choice: "off" }), "Off")
+  assert.ok(R.detailText({ source: "hass", detail: "off", choice: "2" }).indexOf("turned on") > 0)
+})
+
 check("the Home Assistant form shows until it answers", () => {
   assert.strictEqual(R.hassNeedsForm("ok"), false)
   assert.strictEqual(R.hassNeedsForm(""), false)

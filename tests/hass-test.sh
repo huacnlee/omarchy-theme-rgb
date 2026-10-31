@@ -39,7 +39,12 @@ url=""
 for arg; do [[ $arg == http* ]] && url=$arg; done
 printf '%s %s\n' "$url" "$(grep -o 'Bearer [^"]*' <<<"$config")" >>"$CALL_LOG"
 case ${CURL_ANSWER:-200} in
-  200) printf '%s\n200' '[{"entity_id":"light.a","state":"on","attributes":{"friendly_name":"A","supported_color_modes":["xy"]}}]' ;;
+  200)
+    if [[ $url == */api/states/* ]]; then
+      printf '%s\n200' '{"entity_id":"light.a","state":"off","attributes":{"supported_color_modes":["xy"]}}'
+    else
+      printf '%s\n200' '[{"entity_id":"light.a","state":"on","attributes":{"friendly_name":"A","supported_color_modes":["xy"]}}]'
+    fi ;;
   *) printf '\n%s' "$CURL_ANSWER" ;;
 esac
 SH
@@ -112,6 +117,31 @@ if KEYRING="theme-rgb-hass https://typed.example:443" run connect https://typed.
   pass "Connect with no token typed uses the one already kept"
 else
   fail "Connect with no token typed uses the one already kept" "$(cat "$calls")"
+fi
+
+# --- an address written the way the hass plugin accepts it ----------------------
+printf '{"home_assistant":{"url":" HA.Home:8123/ "}}\n' >"$home/.config/omarchy/theme-rgb.json"
+if KEYRING="hass https://ha.home:8123" run lights \
+  && [[ $(cat "$calls") == "https://ha.home:8123/api/states Bearer token-hass" ]]; then
+  pass "an address with no scheme and capitals is read as the hass plugin reads it"
+else
+  fail "an address with no scheme and capitals is read as the hass plugin reads it" "$(state) $(cat "$calls")"
+fi
+printf '{"home_assistant":{"url":"wss://ha.home"}}\n' >"$home/.config/omarchy/theme-rgb.json"
+if KEYRING="hass https://ha.home:443" run lights && [[ $(cat "$calls") == "https://ha.home/api/states Bearer token-hass" ]]; then
+  pass "a wss address means https"
+else
+  fail "a wss address means https" "$(state) $(cat "$calls")"
+fi
+
+# --- poll asks only the lights given, and notes their state ---------------------
+lights_file="$home/.local/state/omarchy/theme-rgb/hass-lights"
+if KEYRING="hass https://ha.home:443" run poll light.a \
+  && [[ $(cat "$calls") == "https://ha.home/api/states/light.a Bearer token-hass" ]] \
+  && [[ $(cat "$lights_file") == $'light.a\tA\toff' ]]; then
+  pass "poll asks one light and updates its state in the list"
+else
+  fail "poll asks one light and updates its state in the list" "$(cat "$calls") / $(cat "$lights_file")"
 fi
 
 # --- no keyring tool -----------------------------------------------------------

@@ -383,36 +383,78 @@ Item {
     watchChanges: true
     printErrors: false
     onLoaded: {
-      var on = {}, turnedOn = false
+      var on = {}, turnedOn = []
       var lines = String(text() || "").split("\n")
       for (var i = 0; i < lines.length; i++) {
         var f = lines[i].split("\t")
         if (f.length < 3 || f[2] !== "on") continue
         on[f[0]] = true
         var choice = root.assign["hass:" + f[0]]
-        if (root.hassOn[f[0]] !== true && choice !== undefined && choice !== "off") turnedOn = true
+        if (root.hassOn[f[0]] !== true && choice !== undefined && choice !== "off") turnedOn.push(f[0])
       }
       var first = root.hassSeen === false
       root.hassSeen = true
       root.hassOn = on
       root.refreshPlan()
-      // The first reading only records what is on; the startup sync covers it.
-      if (turnedOn && !first && !applyProcess.running && !hassApply.running) hassApply.running = true
+      // The first reading only records what is on; the startup sync covers
+      // it. Only the lights just turned on are coloured: one set by hand
+      // since the last sync keeps its colour.
+      if (turnedOn.length > 0 && !first) root.applyHass(turnedOn)
     }
     onFileChanged: reload()
   }
   property bool hassSeen: false
 
+  // Every 20 s only the lights with a colour are asked whether they are on.
+  readonly property var hassAssignedLights: {
+    var list = []
+    if (!hassEnabled) return list
+    for (var k in assign) if (k.indexOf("hass:") === 0 && assign[k] !== "off") list.push(k.substring(5))
+    return list
+  }
+
   Timer {
     interval: 20000
     repeat: true
     running: root.hassAssigned
-    onTriggered: root.refreshHass()
+    onTriggered: {
+      if (hassPoll.running || hassProbe.running || hassConnect.running) return
+      hassPoll.command = ["bash", root.hassScript, "poll"].concat(root.hassAssignedLights)
+      hassPoll.running = true
+    }
+  }
+
+  Process {
+    id: hassPoll
+    onExited: hassStatusFile.reload()
+  }
+
+  // Home Assistant is coloured after each sync, on its own: a slow or
+  // unreachable one never keeps the computer's sync, or the next one,
+  // waiting. `lights` empty means every light with a colour.
+  property var hassApplyQueue: null
+  function applyHass(lights) {
+    if (!hassAssigned) return
+    var next = lights && lights.length > 0 ? lights : []
+    if (hassApply.running) {
+      if (hassApplyQueue === null) hassApplyQueue = next
+      else if (hassApplyQueue.length === 0 || next.length === 0) hassApplyQueue = []
+      else hassApplyQueue = hassApplyQueue.concat(next)
+      return
+    }
+    hassApply.command = ["bash", root.applyScript, "hass"].concat(next)
+    hassApply.running = true
   }
 
   Process {
     id: hassApply
-    command: ["bash", root.applyScript, "hass"]
+    onExited: {
+      hassStatusFile.reload()
+      if (root.hassApplyQueue === null) return
+      var next = root.hassApplyQueue
+      root.hassApplyQueue = null
+      root.applyHass(next)
+    }
   }
 
   FileView {
@@ -437,7 +479,7 @@ Item {
       stdinEnabled = true
       hassStatusFile.reload()
       root.refreshPlan()
-      if (root.hassAssigned && !hassApply.running) hassApply.running = true
+      root.applyHass([])
     }
   }
 
@@ -856,9 +898,10 @@ Item {
 
   Process {
     id: applyProcess
-    command: ["bash", root.applyScript]
+    command: ["bash", root.applyScript, "openrgb"]
     onExited: function(exitCode) {
       root.syncing = false
+      root.applyHass([])
       root.lastSyncFailed = exitCode !== 0
       devicesFile.reload()
       if (root.applyPending) {

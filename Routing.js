@@ -50,6 +50,13 @@ function choiceValue(row, count) {
   return row.choice
 }
 
+// True when a picked value is what the row already shows. The list emits a
+// pick even when nothing changed, and with one colour a stored "all" shows
+// as colour 1: storing that pick would lose "all" for when there are more.
+function samePick(row, count, value) {
+  return value === choiceValue(row, count)
+}
+
 // What to store for a picked value: numbers as numbers.
 function storedChoice(value) {
   return value === "all" || value === "off" ? value : Number(value)
@@ -59,7 +66,7 @@ function storedChoice(value) {
 function detailText(row) {
   if (row.source === "hass") {
     if (row.detail === "on") return "On"
-    if (row.detail === "off") return "Off · takes its colour when turned on"
+    if (row.detail === "off") return row.choice === "off" ? "Off" : "Off · takes its colour when turned on"
     return row.detail === "unavailable" ? "Unavailable" : row.detail
   }
   return row.detail
@@ -82,7 +89,7 @@ function hassMessage(status, lightCount) {
   if (status === "no-token") return "Enter an access token for this Home Assistant."
   if (status === "unauthorized") return "Home Assistant refused the access token. Enter a new one."
   if (status === "unreachable") return "Home Assistant did not answer at this address."
-  if (status === "error") return "Home Assistant could not be read or set; see last-hass.log."
+  if (status === "error") return "Home Assistant answered with an error. Connect again, or see last-hass.log after a sync."
   if (status === "ok" && lightCount === 0) return "Connected, but Home Assistant has no lights that can show a colour."
   return ""
 }

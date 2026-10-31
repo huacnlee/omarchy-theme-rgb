@@ -617,7 +617,7 @@ for preset in flow rows columns zones gaming outline lazyvim omarchy; do
     : >"$calls"
     reference=$(HOME="$home" CALL_LOG="$calls" PATH="$mock_bin:$PATH" "$APPLY" preview)
     actual=$(cut -f3 <<<"$reference" | sort -u | paste -sd,)
-    expected=$(stops | tr ',' '\n' | sort -u | paste -sd,)
+    expected=$(stops layout | tr ',' '\n' | sort -u | paste -sd,)
     expected_amount=$amount
     if [[ $preset == gaming && $amount != 1 ]]; then expected_amount=8; fi
     if [[ $actual == "$expected" && $(cut -f3 <<<"$reference" | sort -u | wc -l) == "$expected_amount" && ! -s $calls ]]; then
@@ -654,7 +654,7 @@ for shape in compact60 compact75; do
   LEDs: $fixture" run_apply
     detected=$(HOME="$home" PATH="$mock_bin:$PATH" "$APPLY" preview)
     actual=$(cut -f3 <<<"$detected" | sort -u | paste -sd,)
-    expected=$(stops | tr ',' '\n' | sort -u | paste -sd,)
+    expected=$(stops layout | tr ',' '\n' | sort -u | paste -sd,)
     expected_keys=$(sort <<<"$compact_names")
     actual_keys=$(cut -f4 <<<"$detected" | sort)
     if [[ $actual == "$expected" && $actual_keys == "$expected_keys" ]] &&
@@ -765,11 +765,18 @@ else
   fail "Gaming: movement, five skills, inventory/character, actions and chat groups" "$(cat "$calls")"
 fi
 set_config '{"mode":"custom","custom":["red","green"],"layout":"gaming"}'
-vivid_palette=$(stops)
+vivid_palette=$(stops layout)
 if node -e 'const c=process.argv[1].split(",");function vivid(hex){const v=hex.match(/../g).map(x=>parseInt(x,16)/255),mx=Math.max(...v),mn=Math.min(...v),l=(mx+mn)/2,s=(mx-mn)/(1-Math.abs(mx+mn-1));return s>=.79&&l>=.475&&l<=.625}process.exit(c[0]==="590000"&&c.slice(1).every(vivid)?0:1)' "$vivid_palette"; then
   pass "Gaming dims the native base and keeps all emphasis colours vivid"
 else
   fail "Gaming dims the native base and keeps all emphasis colours vivid" "$vivid_palette"
+fi
+# The numbered colours stay the theme's: gaming only changes what a device
+# set to all colours lays out.
+if [[ $(stops) == ff0000,00ff00 ]]; then
+  pass "Gaming leaves the numbered colours, and so single-colour devices, alone"
+else
+  fail "Gaming leaves the numbered colours, and so single-colour devices, alone" "$(stops)"
 fi
 mv "$tmp/layout-colors.bak" "$theme/colors.toml"
 
@@ -1016,8 +1023,12 @@ done
 data=$(sed -n 's/^data = "\(.*\)"$/\1/p' <<<"$config" | sed 's/\\"/"/g')
 printf 'curl %s %s %s\n' "$method" "$url" "$data" >>"$CALL_LOG"
 [[ $config == *"Bearer test-token"* ]] || { printf '\n401'; exit 0; }
-if [[ $method == GET ]]; then
-  printf '%s\n200' '[{"entity_id":"light.desk","state":"on","attributes":{"friendly_name":"Desk lamp","supported_color_modes":["hs","color_temp"]}},{"entity_id":"light.shelf","state":"off","attributes":{"friendly_name":"Shelf","supported_color_modes":["rgb"]}},{"entity_id":"light.hall","state":"on","attributes":{"supported_color_modes":["color_temp"]}}]'
+states='[{"entity_id":"light.desk","state":"on","attributes":{"friendly_name":"Desk lamp","supported_color_modes":["hs","color_temp"]}},{"entity_id":"light.shelf","state":"off","attributes":{"friendly_name":"Shelf","supported_color_modes":["rgb"]}},{"entity_id":"light.hall","state":"on","attributes":{"supported_color_modes":["color_temp"]}}]'
+if [[ $method == GET && $url == */api/states ]]; then
+  printf '%s\n200' "$states"
+elif [[ $method == GET ]]; then
+  one=$(jq -c --arg e "${url##*/}" '.[] | select(.entity_id == $e)' <<<"$states")
+  if [[ -n $one ]]; then printf '%s\n200' "$one"; else printf '{}\n404'; fi
 else
   printf '[]\n200'
 fi
@@ -1026,13 +1037,13 @@ chmod +x "$mock_bin/secret-tool" "$mock_bin/curl"
 rgb() { printf '%d,%d,%d' "0x${1:0:2}" "0x${1:2:2}" "0x${1:4:2}"; }
 set_config '{"mode":"palette","colors":3,"brightness":50,"home_assistant":{"url":"https://ha.test"},"assign":{"hass:light.desk":2,"hass:light.shelf":1}}'
 OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply
-if called 'curl GET https://ha.test/api/states ' \
+if called 'curl GET https://ha.test/api/states/light.desk ' \
+  && ! grep -q 'api/states ' "$calls" \
   && called 'curl POST https://ha.test/api/services/light/turn_on {"entity_id":"light.desk","rgb_color":['"$(rgb "$(colour 2)")"']}' \
-  && ! grep -q 'light.shelf' <(grep '^curl POST' "$calls") \
-  && [[ $(cat "$hass_lights") == $'light.desk\tDesk lamp\ton\nlight.shelf\tShelf\toff' ]]; then
+  && ! grep -q 'light.shelf' <(grep '^curl POST' "$calls"); then
   pass "a lit Home Assistant light gets its colour; one that is off stays off"
 else
-  fail "a lit Home Assistant light gets its colour; one that is off stays off" "$(cat "$calls"; cat "$hass_lights")"
+  fail "a lit Home Assistant light gets its colour; one that is off stays off" "$(cat "$calls")"
 fi
 
 # --- "hass" colours only the Home Assistant lights -------------------------
@@ -1042,6 +1053,21 @@ if ! grep -q '^openrgb' "$calls" \
   pass "hass colours the Home Assistant lights without touching OpenRGB"
 else
   fail "hass colours the Home Assistant lights without touching OpenRGB" "$(cat "$calls")"
+fi
+
+# --- "openrgb" leaves Home Assistant to the shell; "hass <entity>" one light
+OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply openrgb
+if grep -q '^openrgb' "$calls" && ! grep -q '^curl' "$calls"; then
+  pass "openrgb colours the computer without waiting on Home Assistant"
+else
+  fail "openrgb colours the computer without waiting on Home Assistant" "$(cat "$calls")"
+fi
+set_config '{"mode":"palette","colors":3,"home_assistant":{"url":"https://ha.test"},"assign":{"hass:light.desk":2,"hass:light.shelf":1}}'
+OPENRGB_LIST_DEVICES="$PLAIN_DEVICES" run_apply hass light.shelf
+if ! grep -q 'light.desk' "$calls" && called 'curl GET https://ha.test/api/states/light.shelf '; then
+  pass "hass with a light names only that light, the others keep what they have"
+else
+  fail "hass with a light names only that light, the others keep what they have" "$(cat "$calls")"
 fi
 
 # --- with Home Assistant switched off, its lights are neither set nor listed

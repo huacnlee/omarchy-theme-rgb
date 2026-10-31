@@ -7,6 +7,11 @@
 #
 #   omarchy-theme-rgb-hass lights   list the colour lights: one
 #                                   "<entity>\t<name>\t<state>" line each
+#   omarchy-theme-rgb-hass poll <entity>...
+#                                   ask only these lights whether they are on,
+#                                   and note it in the list (the shell does
+#                                   this every 20 s; a whole state dump that
+#                                   often is megabytes on a big install)
 #   omarchy-theme-rgb-hass apply    read "<entity> <rrggbb>" lines on stdin and
 #                                   colour each of those lights that is on
 #   omarchy-theme-rgb-hass connect <url>
@@ -19,13 +24,15 @@
 # turns a lamp on. Only the colour is sent, never a brightness, so a lamp
 # keeps the brightness the room has it at.
 #
-# Both commands refresh two files the panel reads: the light list
+# Every command refreshes two files the panel reads: the light list
 # (hass-lights) and how the last attempt went (hass-status): ok,
 # no-address, no-keyring, no-token, unauthorized, unreachable or error.
 #
 # Where Home Assistant is: "home_assistant": { "url": ... } in theme-rgb.json,
-# else the address the Home Assistant shell plugin (hass) is set up with. The
-# token comes from the keyring: Theme RGB's own entry, stored with
+# else the address the Home Assistant shell plugin (hass) is set up with,
+# read the way that plugin reads it (no scheme means https, ws and wss mean
+# http and https). The token comes from the keyring: Theme RGB's own entry,
+# stored by Connect or with
 #   secret-tool store --label="Theme RGB Home Assistant" \
 #     service theme-rgb-hass origin https://ha.example.com:443
 # else the hass plugin's entry for the same address. It goes to curl on
@@ -50,32 +57,61 @@ status() {
   printf '%s\n' "$1" >"$STATUS_FILE"
 }
 
-# "https://ha.local" -> "https://ha.local:443": the keyring entries are keyed
-# by an origin with the port spelled out.
-origin_of() {
-  local url="${1%/}" scheme rest host port
-  [[ $url =~ ^(https?)://([^/]+) ]] || return 1
-  scheme=${BASH_REMATCH[1]}
-  rest=${BASH_REMATCH[2]}
-  if [[ $rest =~ ^(.+):([0-9]+)$ ]]; then
-    host=${BASH_REMATCH[1]}
-    port=${BASH_REMATCH[2]}
+# Replaces the light list with stdin in one rename; each run writes its own
+# temporary file, so two runs at once never interleave.
+write_lights() {
+  local tmp
+  tmp=$(mktemp "$LIGHTS_FILE.XXXXXX") || return 1
+  if cat >"$tmp" && mv "$tmp" "$LIGHTS_FILE"; then return 0; fi
+  rm -f "$tmp"
+  return 1
+}
+
+# "HA.local/" -> ORIGIN "https://ha.local:443" (what the keyring entries are
+# keyed by, port spelled out) and BASE "https://ha.local" (where the API is,
+# a path kept). Fails on anything that is not one host.
+parse_address() {
+  local url scheme rest authority path host port
+  url=${1//[[:space:]]/}
+  [[ -n $url ]] || return 1
+  [[ $url == *://* ]] || url="https://${url#/}"
+  scheme=${url%%://*}
+  scheme=${scheme,,}
+  rest=${url#*://}
+  authority=${rest%%[/?#]*}
+  path=${rest:${#authority}}
+  path=${path%%[?#]*}
+  path=${path%/}
+  case $scheme in https|wss) scheme=https ;; http|ws) scheme=http ;; *) return 1 ;; esac
+  [[ -n $authority && $authority != *@* ]] || return 1
+  if [[ $authority =~ ^(\[[0-9A-Fa-f:.]+\])(:([0-9]+))?$ || $authority =~ ^([A-Za-z0-9._-]+)(:([0-9]+))?$ ]]; then
+    host=${BASH_REMATCH[1],,}
+    port=${BASH_REMATCH[3]}
   else
-    host=$rest
+    return 1
+  fi
+  BASE="$scheme://$host${port:+:$port}$path"
+  if [[ -z $port ]]; then
     [[ $scheme == https ]] && port=443 || port=80
   fi
-  printf '%s://%s:%s\n' "$scheme" "$host" "$port"
+  (( 10#$port >= 1 && 10#$port <= 65535 )) || return 1
+  ORIGIN="$scheme://$host:$((10#$port))"
 }
+
+if ! command -v jq >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
+  status error
+  echo "omarchy-theme-rgb-hass: needs jq and curl" >&2
+  exit 3
+fi
 
 URL=""
 [[ ${1:-} == connect ]] && URL=${2:-}
 [[ -z $URL && -f $CONFIG ]] && URL=$(jq -r '.home_assistant.url // empty | strings' "$CONFIG" 2>/dev/null)
 [[ -z $URL && -f $HASS_PLUGIN_CONFIG ]] && URL=$(jq -r '.baseUrl // empty | strings' "$HASS_PLUGIN_CONFIG" 2>/dev/null)
-URL=${URL%/}
-ORIGIN=$(origin_of "$URL" 2>/dev/null)
-if [[ -z $ORIGIN ]]; then
+ORIGIN="" BASE=""
+if ! parse_address "$URL"; then
   status no-address
-  : >"$LIGHTS_FILE"
+  : | write_lights
   exit 3
 fi
 
@@ -110,48 +146,89 @@ request() {
     printf 'header = "Authorization: Bearer %s"\n' "$TOKEN"
     printf 'header = "Content-Type: application/json"\n'
     [[ -n $body ]] && printf 'data = "%s"\n' "${body//\"/\\\"}"
-  } | curl -s -m "$TIMEOUT" -X "$method" -K - -w '\n%{http_code}' "$URL$path"
+  } | curl -s -m "$TIMEOUT" -X "$method" -K - -w '\n%{http_code}' "$BASE$path"
 }
 
-# Every light's state, or a status and exit when Home Assistant cannot be read.
-STATES=""
-fetch_states() {
-  local reply code
-  reply=$(request GET /api/states)
-  code=${reply##*$'\n'}
-  STATES=${reply%$'\n'*}
-  case $code in
+# Says why a request failed and exits; returns for a 200.
+check() {
+  case $1 in
     200) ;;
     401|403) status unauthorized; exit 4 ;;
     000) status unreachable; exit 4 ;;
     *) status error; exit 4 ;;
   esac
-  if ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"$STATES"; then
+}
+
+# Every colour light, into the list.
+fetch_lights() {
+  local reply lights
+  reply=$(request GET /api/states)
+  check "${reply##*$'\n'}"
+  if ! lights=$(jq -r --argjson modes "$COLOUR_MODES" '
+      if type != "array" then error("not a state list") else . end
+      | [.[] | select(.entity_id | startswith("light."))
+             | select(((.attributes.supported_color_modes // []) - ((.attributes.supported_color_modes // []) - $modes)) | length > 0)]
+      | sort_by((.attributes.friendly_name // .entity_id) | ascii_downcase)
+      | .[] | [.entity_id, (.attributes.friendly_name // .entity_id), .state] | @tsv
+    ' <<<"${reply%$'\n'*}" 2>/dev/null); then
     status error
     exit 4
   fi
-  jq -r --argjson modes "$COLOUR_MODES" '
-    [.[] | select(.entity_id | startswith("light."))
-         | select(((.attributes.supported_color_modes // []) - ((.attributes.supported_color_modes // []) - $modes)) | length > 0)]
-    | sort_by((.attributes.friendly_name // .entity_id) | ascii_downcase)
-    | .[] | [.entity_id, (.attributes.friendly_name // .entity_id), .state] | @tsv
-  ' <<<"$STATES" >"$LIGHTS_FILE.new" && mv "$LIGHTS_FILE.new" "$LIGHTS_FILE"
+  if [[ -n $lights ]]; then printf '%s\n' "$lights"; fi | write_lights
+  status ok
+}
+
+# Only the given lights, each one's state noted in the list. A light Home
+# Assistant no longer has reads as unavailable.
+declare -A STATE=()
+fetch_states_of() {
+  local entity reply code updates=""
+  for entity; do
+    [[ $entity =~ ^light\.[a-z0-9_]+$ ]] || continue
+    reply=$(request GET "/api/states/$entity")
+    code=${reply##*$'\n'}
+    if [[ $code == 404 ]]; then
+      STATE[$entity]=unavailable
+    else
+      check "$code"
+      STATE[$entity]=$(jq -r --argjson modes "$COLOUR_MODES" '
+        if ((.attributes.supported_color_modes // []) - ((.attributes.supported_color_modes // []) - $modes)) | length > 0
+        then .state // "unavailable" else "not a colour light" end' <<<"${reply%$'\n'*}" 2>/dev/null)
+    fi
+    updates+="$entity"$'\t'"${STATE[$entity]}"$'\n'
+  done
+  if [[ -n $updates && -f $LIGHTS_FILE ]]; then
+    awk -F'\t' -v OFS='\t' -v updates="$updates" '
+      BEGIN { n = split(updates, lines, "\n"); for (i = 1; i <= n; i++) if (split(lines[i], f, "\t") == 2) s[f[1]] = f[2] }
+      ($1 in s) { $3 = s[$1] } { print }
+    ' "$LIGHTS_FILE" | write_lights
+  fi
   status ok
 }
 
 case ${1:-} in
   lights|connect)
-    fetch_states
+    fetch_lights
     cat "$LIGHTS_FILE"
     ;;
+  poll)
+    shift
+    fetch_states_of "$@"
+    ;;
   apply)
-    fetch_states
+    pairs=$(cat)
+    entities=()
+    while read -r entity hex; do
+      [[ $entity =~ ^light\.[a-z0-9_]+$ && $hex =~ ^[0-9A-Fa-f]{6}$ ]] && entities+=("$entity")
+    done <<<"$pairs"
+    (( ${#entities[@]} > 0 )) || exit 0
+    fetch_states_of "${entities[@]}"
     failed=0
     while read -r entity hex; do
       [[ $entity =~ ^light\.[a-z0-9_]+$ && $hex =~ ^[0-9A-Fa-f]{6}$ ]] || continue
-      state=$(awk -F'\t' -v e="$entity" '$1 == e { print $3; exit }' "$LIGHTS_FILE")
+      state=${STATE[$entity]:-}
       if [[ $state != on ]]; then
-        echo "$entity: ${state:-not a colour light}, left alone"
+        echo "$entity: ${state:-unknown}, left alone"
         continue
       fi
       body=$(printf '{"entity_id":"%s","rgb_color":[%d,%d,%d]}' "$entity" \
@@ -164,12 +241,12 @@ case ${1:-} in
         echo "$entity: Home Assistant answered $code"
         failed=1
       fi
-    done
+    done <<<"$pairs"
     (( failed )) && { status error; exit 5; }
     exit 0
     ;;
   *)
-    echo "usage: omarchy-theme-rgb-hass lights|apply|connect <url>" >&2
+    echo "usage: omarchy-theme-rgb-hass lights|poll <entity>...|apply|connect <url>" >&2
     exit 2
     ;;
 esac

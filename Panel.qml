@@ -170,11 +170,34 @@ Panel {
     return 0
   }
 
-  readonly property var cursorRows: ["mode", "brightness", "layout"]
+  readonly property var cursorRows: ["mode", "brightness", "devices", "layout"]
+
+  // The devices row, top to bottom as drawn: each device's choice, a
+  // skipped detector's Try again, the Home Assistant switch, then its lights.
+  readonly property var deviceSlots: {
+    var list = []
+    var i
+    if (openrgbPresent) {
+      for (i = 0; i < openrgbRows.length; i++) list.push({ kind: "choice", key: Routing.assignKey(openrgbRows[i]) })
+      for (i = 0; i < skippedDetectors.length; i++) list.push({ kind: "retry", key: skippedDetectors[i] })
+    }
+    list.push({ kind: "hass", key: "" })
+    if (hassEnabled && !hassShowForm)
+      for (i = 0; i < hassRows.length; i++) list.push({ kind: "choice", key: Routing.assignKey(hassRows[i]) })
+    return list
+  }
+  function cursorOn(kind, key) {
+    if (!cursorActive || cursorRow !== "devices") return false
+    var slot = deviceSlots[cursorIndex]
+    return !!slot && slot.kind === kind && slot.key === key
+  }
+  // Enter on a device opens its list; the row with that key answers.
+  signal choiceRequested(string key)
 
   function rowLength(row) {
     if (row === "mode") return modes.length
     if (row === "layout") return layouts.length
+    if (row === "devices") return deviceSlots.length
     return 1
   }
 
@@ -195,11 +218,18 @@ Panel {
         }
         if (best >= 0) { cursorIndex = best; return }
       }
+      if (cursorRow === "devices") {
+        var next = cursorIndex + dy
+        if (next >= 0 && next < deviceSlots.length) { cursorIndex = next; return }
+      }
       r = Math.max(0, Math.min(rows.length - 1, r + dy))
+      if (rows[r] === cursorRow) return
       cursorRow = rows[r]
-      cursorIndex = Math.min(cursorIndex, Math.max(0, rowLength(cursorRow) - 1))
+      if (cursorRow === "devices") cursorIndex = dy > 0 ? 0 : Math.max(0, deviceSlots.length - 1)
+      else cursorIndex = Math.min(cursorIndex, Math.max(0, rowLength(cursorRow) - 1))
       return
     }
+    if (cursorRow === "devices") return
     if (cursorRow === "brightness") {
       if (service) service.setBrightness(brightness + dx * 10)
       return
@@ -212,6 +242,19 @@ Panel {
   function activateCursor() {
     if (cursorRow === "mode") chooseMode(modes[cursorIndex].value)
     else if (cursorRow === "layout") chooseLayout(layouts[cursorIndex].value)
+    else if (cursorRow === "devices") {
+      var slot = deviceSlots[cursorIndex]
+      if (!slot || !service) return
+      if (slot.kind === "choice") choiceRequested(slot.key)
+      else if (slot.kind === "retry") service.retryDetector(slot.key)
+      else if (slot.kind === "hass") toggleHass()
+    }
+  }
+
+  function toggleHass() {
+    if (!service) return
+    hassEditing = false
+    service.setHassEnabled(!hassEnabled)
   }
 
   // One device: the colours it shows, its name, and the choice of which.
@@ -293,19 +336,30 @@ Panel {
       foreground: themeRgb.foreground
       fontFamily: themeRgb.fontFamily
       onChanged: function(v) {
+        if (Routing.samePick(deviceRow.modelData, deviceRow.count, v)) return
         if (themeRgb.service) themeRgb.service.setAssign(Routing.assignKey(deviceRow.modelData), Routing.storedChoice(v))
       }
-      // While the list is open it has the keys; closing hands them back.
+      hasCursor: themeRgb.cursorOn("choice", Routing.assignKey(deviceRow.modelData))
+      onHovered: function(isHovered) { if (isHovered) themeRgb.cursorActive = false }
+      // While the list is open it has the keys; closing it, or the row going
+      // away under it (the list redraws when a lamp turns on), hands them back.
       property bool counted: false
+      function release() {
+        if (!counted) return
+        counted = false
+        themeRgb.openDropdowns = Math.max(0, themeRgb.openDropdowns - 1)
+        if (themeRgb.opened) Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+      }
       onPopupOpenChanged: {
         if (popupOpen && !counted) { counted = true; themeRgb.openDropdowns++ }
-        else if (!popupOpen && counted) {
-          counted = false
-          themeRgb.openDropdowns--
-          if (themeRgb.opened) Qt.callLater(function() { keyCatcher.forceActiveFocus() })
-        }
+        else if (!popupOpen) release()
       }
-      Component.onDestruction: if (counted) themeRgb.openDropdowns--
+      Component.onDestruction: release()
+      Connections {
+        target: themeRgb
+        function onChoiceRequested(key) { if (key === Routing.assignKey(deviceRow.modelData)) choice.open() }
+        function onOpenedChanged() { if (!themeRgb.opened) choice.close() }
+      }
     }
   }
 
@@ -346,6 +400,8 @@ Panel {
   onOpenedChanged: if (opened) {
     hoveredLayout = ""
     hassEditing = false
+    // A list left open when the panel closed must not keep the keys.
+    openDropdowns = 0
     lookupService()
     if (service) { service.refreshVariables(); service.refreshStops(); service.refreshHass() }
     cursorActive = false
@@ -457,7 +513,7 @@ Panel {
         Column {
           width: parent.width
           spacing: Style.space(10)
-          visible: !themeRgb.openrgbPresent
+          visible: !themeRgb.openrgbPresent && !themeRgb.hassEnabled
 
           Text {
             width: parent.width
@@ -486,6 +542,18 @@ Panel {
             font.family: themeRgb.fontFamily
             font.pixelSize: Style.font.caption
           }
+
+          // Lamps in Home Assistant need no OpenRGB.
+          Toggle {
+            width: parent.width
+            label: "Home Assistant lights"
+            description: "Only lamps and strips in Home Assistant, without OpenRGB."
+            checked: false
+            foreground: themeRgb.foreground
+            fontFamily: themeRgb.fontFamily
+            enabled: !!themeRgb.service
+            onClicked: themeRgb.toggleHass()
+          }
         }
 
         // Settings ----------------------------------------------------------
@@ -493,7 +561,7 @@ Panel {
           id: settings
           width: parent.width
           spacing: Style.space(14)
-          visible: themeRgb.openrgbPresent
+          visible: themeRgb.openrgbPresent || themeRgb.hassEnabled
 
         // Theme colours: how many, and their numbers ------------------------
         Column {
@@ -664,12 +732,45 @@ Panel {
           }
 
           Repeater {
-            model: themeRgb.openrgbRows
+            model: themeRgb.openrgbPresent ? themeRgb.openrgbRows : []
             delegate: DeviceRow { width: devicesColumn.width }
           }
 
+          // Home Assistant alone: the computer can still be set up later.
+          Item {
+            visible: !themeRgb.openrgbPresent
+            width: parent.width
+            height: Math.max(noOpenrgbText.implicitHeight, installLater.implicitHeight)
+
+            Text {
+              id: noOpenrgbText
+              anchors.left: parent.left
+              anchors.right: installLater.left
+              anchors.rightMargin: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              wrapMode: Text.WordWrap
+              text: "OpenRGB is not installed, so the computer's own lighting is left as it is."
+              color: themeRgb.dim
+              font.family: themeRgb.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+
+            Button {
+              id: installLater
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              text: "Install OpenRGB"
+              bordered: true
+              foreground: themeRgb.foreground
+              fontFamily: themeRgb.fontFamily
+              fontSize: Style.font.caption
+              enabled: !!themeRgb.service
+              onClicked: themeRgb.installOpenrgb()
+            }
+          }
+
           Text {
-            visible: themeRgb.openrgbRows.length === 0
+            visible: themeRgb.openrgbPresent && themeRgb.openrgbRows.length === 0
             width: parent.width
             wrapMode: Text.WordWrap
             text: themeRgb.syncing ? "Looking for devices…" : "OpenRGB found no devices on the last sync."
@@ -680,7 +781,7 @@ Panel {
 
           // A skipped device is why something is not lit.
           Repeater {
-            model: themeRgb.skippedDetectors
+            model: themeRgb.openrgbPresent ? themeRgb.skippedDetectors : []
             delegate: Item {
               id: skippedRow
               required property string modelData
@@ -710,6 +811,7 @@ Panel {
                 fontFamily: themeRgb.fontFamily
                 fontSize: Style.font.caption
                 enabled: !!themeRgb.service
+                hasCursor: themeRgb.cursorOn("retry", skippedRow.modelData)
                 Accessible.name: "Try " + skippedRow.modelData + " again"
                 onClicked: themeRgb.service.retryDetector(skippedRow.modelData)
               }
@@ -730,10 +832,8 @@ Panel {
             foreground: themeRgb.foreground
             fontFamily: themeRgb.fontFamily
             enabled: !!themeRgb.service
-            onClicked: {
-              themeRgb.hassEditing = false
-              themeRgb.service.setHassEnabled(!themeRgb.hassEnabled)
-            }
+            hasCursor: themeRgb.cursorOn("hass", "")
+            onClicked: themeRgb.toggleHass()
           }
 
           Text {
