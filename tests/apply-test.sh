@@ -991,7 +991,7 @@ expected_plan=$(printf '%s\n' \
   "openrgb"$'\t'"Logitech G512 RGB"$'\t'"Logitech G512 RGB"$'\t'"Keyboard"$'\t'"all"$'\t'"$dim" \
   "openrgb"$'\t'"Razer Basilisk V3"$'\t'"Razer Basilisk V3"$'\t'"Mouse"$'\t'"3"$'\t'"$(cut -d, -f3 <<<"$dim")" \
   "hass"$'\t'"light.desk"$'\t'"Desk lamp"$'\t'"on"$'\t'"2"$'\t'"$(colour 2)" \
-  $'hass\tlight.shelf\tShelf\toff\toff\t')
+  $'hass\tlight.shelf\tShelf\toff\toff\t' end)
 if [[ $(plan) == "$expected_plan" ]]; then
   pass "plan names every device's colours; Home Assistant gets them before brightness"
 else

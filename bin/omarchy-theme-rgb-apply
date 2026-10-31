@@ -12,7 +12,8 @@
 #   omarchy-theme-rgb-apply plan        print what every known device gets,
 #                                       one tab-separated line each:
 #                                       source key name detail choice colours
-#                                       (no OpenRGB or Home Assistant call)
+#                                       then "end" (a read without it was cut
+#                                       short); no OpenRGB or Home Assistant call
 #   omarchy-theme-rgb-apply hass        colour only the Home Assistant lights
 #   omarchy-theme-rgb-apply variables   print "name hex" for every theme
 #                                       variable the user may pick
@@ -592,7 +593,7 @@ plan() {
 case ${1:-} in
   stops) stops; exit 0 ;;
   variables) theme_variables; exit 0 ;;
-  plan) plan; exit 0 ;;
+  plan) plan; echo end; exit 0 ;;
 esac
 
 # --- apply ----------------------------------------------------------------

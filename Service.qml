@@ -194,9 +194,23 @@ Item {
     refreshPlan()
   }
 
+  // Many things ask for the plan at once (a save, the settings file
+  // changing, a device list, Home Assistant answering), so the asks are
+  // gathered for a moment and a run in flight is never killed: a killed run
+  // hands over half its rows and the device list collapses and grows back.
+  property bool planPending: false
+
   function refreshPlan() {
-    if (planProbe.running) planProbe.running = false
-    planProbe.running = true
+    planTimer.restart()
+  }
+
+  Timer {
+    id: planTimer
+    interval: 150
+    onTriggered: {
+      if (planProbe.running) root.planPending = true
+      else planProbe.running = true
+    }
   }
 
   // Asks Home Assistant for its lights again (the panel does on opening);
@@ -375,7 +389,19 @@ Item {
     command: ["bash", root.applyScript, "plan"]
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: root.planText = String(text || "")
+      // The plan ends with an "end" line; output without it is from a run
+      // that did not finish and is not shown.
+      onStreamFinished: {
+        var out = String(text || "")
+        var mark = out.lastIndexOf("end\n")
+        if (mark < 0 || mark !== out.length - 4 || (mark > 0 && out[mark - 1] !== "\n")) return
+        root.planText = out.slice(0, mark)
+      }
+    }
+    onExited: {
+      if (!root.planPending) return
+      root.planPending = false
+      running = true
     }
   }
 
